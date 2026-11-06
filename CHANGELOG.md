@@ -4,6 +4,51 @@
 
 ---
 
+## 2026-11-07 · 修复：quit.cmd 停不掉后端 + 控制台文字重影
+
+反馈：双击 `quit.cmd` 后窗口里中文变成「已已自自动动存存档档」，然后卡住，退不出去。
+
+### 根因（两个，叠在一起）
+
+1. **`server/api.py` 少了 `import threading`**（前后端拆分时漏掉）
+   - `/api/quit` 与 `/api/restart` 里 `threading.Timer(0.8, self.server.shutdown)` 抛 `NameError`
+   - 异常发生在响应已写回之后，所以脚本看到「已自动存档」，但**服务从未真正关闭**；
+     `quit.ps1` 等 10 秒后报超时，`quit.cmd` 因 `errorlevel 1` 停在 `pause`
+2. **`quit.ps1` / `start.ps1` 里的 `[Console]::OutputEncoding = UTF8`**
+   - 它会把控制台输出代码页切成 65001，在中文 Windows 的旧式控制台里导致 CJK 字形重影
+     （截图里的「已已自自动动」）
+
+### 变更
+
+- `server/api.py`：补 `import threading`；`/api/quit`、`/api/restart` 恢复正常
+- `quit.ps1`
+  - 删掉 `OutputEncoding` 覆盖，中文回到控制台原生代码页渲染
+  - 新增兜底：接口返回 ok 但 10 秒后端口仍在监听时，用 `Get-NetTCPConnection` 找到占用者，
+    若进程名是 `python*` 就强制结束并正常退出（对旧版后端也有效）
+- `start.ps1`：同样删掉 `OutputEncoding` 覆盖（顺手修掉一次误操作导致的 113 处 `\r\r\n`）
+- 玩家手册 FAQ 增加「quit.cmd 停不掉 / 文字重影」条目
+
+### 验证（临时副本 + 8795 端口，start.ps1 拉起 → quit.ps1 退出）
+
+```text
+启动后 /api/health → 200
+quit.ps1 -Port 8795 → exit 0，用时 5s，端口关闭，无残留 python 进程
+输出：已自动存档，正在停止后端… / 后端已停止，可以关闭浏览器。
+```
+
+### 测试
+
+```text
+python sim/selftest.py        -> 67 / 67
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 31 / 31
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     -> 23 / 23
+node tools/route_gui_check.js -> 10 / 10
+```
+
+---
+
 ## 2026-11-07 · 交互轮：启动时先选「继续上次对局 / 开新对局」
 
 反馈：启动就直接接着旧档跑，没有选择余地；想开新局还得记得加 `-NoResume`。

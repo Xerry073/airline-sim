@@ -2,6 +2,7 @@
 """HTTP 层：路由分发、JSON 读写、静态文件。"""
 
 import json
+import threading
 from http.server import BaseHTTPRequestHandler
 
 from meta import build_meta

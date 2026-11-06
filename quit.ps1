@@ -8,7 +8,6 @@ param(
 
 $ErrorActionPreference = "SilentlyContinue"
 $u = "http://127.0.0.1:$Port"
-try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch {}
 
 function Say {
     param([string]$msg = "", [string]$color = "Gray")
@@ -62,6 +61,25 @@ for ($i = 0; $i -lt 40; $i++) {
         Say "  下次双击桌面「航空模拟」会自动恢复存档。" DarkGray
         Start-Sleep -Milliseconds 1500
         exit 0
+    }
+}
+
+# 兜底：接口返回了 ok 但进程没退（旧版本后端 / 卡住的线程），按端口找占用者
+$conns = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+$ownerPid = 0
+if ($conns) { $ownerPid = [int]($conns | Select-Object -First 1).OwningProcess }
+if ($ownerPid -gt 0) {
+    $owner = Get-Process -Id $ownerPid -ErrorAction SilentlyContinue
+    if ($owner -and $owner.ProcessName -like "python*") {
+        Say "  后端没有自行退出，正在结束后端进程（PID $ownerPid）…" Yellow
+        Stop-Process -Id $ownerPid -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 800
+        if (-not (Test-Alive)) {
+            Say "  后端已强制停止，可以关闭浏览器。" Green
+            Say "  下次双击桌面「航空模拟」会自动恢复存档。" DarkGray
+            Start-Sleep -Milliseconds 1200
+            exit 0
+        }
     }
 }
 
