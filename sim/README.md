@@ -13,7 +13,7 @@ config → util → model → products → market → settle → ai → goals �
 ## 运行
 
 ```bash
-python selftest.py                                  # 66 条验收自测，应先跑这个
+python selftest.py                                  # 67 条验收自测，应先跑这个
 python simulate.py --days 720 --ai 50 --cash 3000    # 基准场景
 python simulate.py --days 360 --ai 12 --cash 1500    # 小规模快速验证
 ```

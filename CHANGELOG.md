@@ -4,6 +4,37 @@
 
 ---
 
+## 2026-11-07 · 信息轮：加「总资产」，对手榜把玩家高亮进去
+
+反馈：想和对手比资产，但「我的公司」只有现金和负债；对手榜里又完全看不到自己。
+
+### 变更
+
+- **快照新增 `player.assets`**（`sim/game.py`）
+  - `total` = 现金 + 机队现值；`equity` = 总资产 − 负债；另给 `cash / fleet / debt / market_cap`
+- **KPI 新增「总资产 ¥M」**（`web/js/app.js`）
+  - 大字总资产，小字给净资产；悬停说明「总资产 = 现金 + 机队现值，净资产 = 总资产 − 负债」
+- **对手榜把玩家按名次插进去并高亮**（`web/js/app.js`、`web/css/app.css`）
+  - 玩家行：`tr.me`，黄色文字 + 淡黄底 + 左侧竖线，名称后缀「（你）」
+  - 与对手同一套排序（全体现存公司名次），所以能直接看出「我和第 3 名差多少」
+  - 原有「TOP 20/50」标签不变，提示文案改为「高亮的是你自己」
+
+### 测试
+
+- `sim/selftest.py` 66 → **67**：总资产 = 现金 + 机队、净资产 = 总资产 − 负债
+- `tools/panel_check.js` 20 → **21**：玩家按名次插入榜单且落在正确位置、带 `tr.me` 高亮
+
+```text
+python sim/selftest.py        -> 67 / 67
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 31 / 31
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     -> 21 / 21
+node tools/route_gui_check.js -> 10 / 10
+```
+
+---
+
 ## 2026-11-07 · 可用性轮：「日占机」改名为「机队利用」并列出各机型
 
 反馈：买了 777-300ER 之后，KPI 还是显示「A320 100%」，看不出新飞机是闲置的；

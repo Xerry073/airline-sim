@@ -213,6 +213,9 @@ function render(){
     const usageCls=usage.over?'neg':(usage.worstPct>=85?'warn':'pos');
     $("#kpis").innerHTML=`
       <div class="kpi"><div class="l">现金 ¥M</div><div class="v">${money(p.cash)}</div></div>
+      <div class="kpi" title="总资产 = 现金 + 机队现值；净资产 = 总资产 − 负债，与对手榜的市值同口径排名">
+        <div class="l">总资产 ¥M</div><div class="v">${money((p.assets||{}).total ?? (p.cash + ((p.assets||{}).fleet||0)))}</div>
+        <div class="sub">净资产 ${money((p.assets||{}).equity ?? p.equity)}</div></div>
       <div class="kpi"><div class="l">负债 ¥M</div><div class="v">${money(p.debt)}</div></div>
       <div class="kpi"><div class="l">日客流</div><div class="v">${Math.round(k.pax||0).toLocaleString()}</div></div>
       <div class="kpi"><div class="l">日 EBITDA</div><div class="v ${eb>=0?'pos':'neg'}">${money(eb)}</div></div>
@@ -241,17 +244,30 @@ function render(){
 // 侧栏「竞争对手」：只列对手（不含本公司），标题标注 TOP 20 / 共 N 家。
 function renderRivals(s){
   const list=(s&&s.rivals)||[];
+  const me=s&&s.player;
   const total=(s&&Number.isFinite(s.rivals_total))?s.rivals_total:list.length;
   const tag=$("#rivalcount");
   if(tag){
     tag.textContent=list.length<total?`TOP ${list.length}/${total}`:`${total} 家`;
-    tag.title=`按市值排名，不含本公司；显示前 ${list.length} 家`
+    tag.title=`按市值排名，高亮的是你自己；对手显示前 ${list.length} 家`
       +(list.length<total?`（共 ${total} 家对手）`:"（全部对手）");
   }
-  $("#rivals").innerHTML=list.slice(0,20).map(a=>`
-    <tr><td class="rk">${a.rank||""}</td><td>${escHTML(a.name)}</td>
-    <td>${escHTML(a.hub||"—")}</td><td>${a.routes}</td>
-    <td>${money(a.market_cap)}</td></tr>`).join("")
+  const rows=list.slice(0,20).map(a=>({
+    rank:Number(a.rank)||1e9,
+    html:`<tr><td class="rk">${a.rank||""}</td><td>${escHTML(a.name)}</td>
+      <td>${escHTML(a.hub||"—")}</td><td>${a.routes}</td>
+      <td>${money(a.market_cap)}</td></tr>`,
+  }));
+  if(me&&me.rank){
+    rows.push({
+      rank:Number(me.rank)||1e9,
+      html:`<tr class="me"><td class="rk">${me.rank}</td><td>${escHTML(me.name)}（你）</td>
+        <td>${escHTML((me.hubs||[])[0]||"—")}</td><td>${(me.routes||[]).length}</td>
+        <td>${money(me.market_cap)}</td></tr>`,
+    });
+  }
+  rows.sort((a,b)=>a.rank-b.rank);
+  $("#rivals").innerHTML=rows.map(r=>r.html).join("")
     ||'<tr><td style="color:#78899c">暂无对手</td></tr>';
 }
 // ---- renderRivals 结束（tools/panel_check.js 抽取到此标记） ----

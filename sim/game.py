@@ -931,6 +931,15 @@ class Game:
                 # 成本分项与机队利用率：解释「航线都赚、公司却亏」
                 "costs": ({k: round(v, 4) for k, v in p.last_costs.items()}
                           if getattr(p, "last_costs", None) else None),
+                # 资产口径：总资产 = 现金 + 机队现值；净资产 = 总资产 − 负债
+                "assets": {
+                    "cash": round(p.cash, 2),
+                    "fleet": round(p.fleet_value(), 2),
+                    "total": round(p.cash + p.fleet_value(), 2),
+                    "debt": round(p.debt, 2),
+                    "equity": round(p.equity, 2),
+                    "market_cap": round(p.rank_score, 2),
+                },
                 "capacity": {
                     "hours_used": round(p.total_hours(), 1),
                     "hours_cap": round(p.capacity_hours(), 1),

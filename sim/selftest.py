@@ -423,6 +423,11 @@ def main():
               c7["fixed_total"] - (c7["staff"] + c7["hub_fixed"] + c7["depreciation"]
                                    + c7["lease"] + c7["interest"] + c7["idle"])) <= 0.002,
           str({k: c7.get(k) for k in ("staff", "hub_fixed", "depreciation", "lease", "fixed_total")}))
+    pa7 = pl7.get("assets") or {}
+    check("UI-09", "快照给出总资产与净资产口径",
+          abs(pa7.get("total", -1) - (pa7.get("cash", 0) + pa7.get("fleet", 0))) < 0.01
+          and abs(pa7.get("equity", -1) - (pa7.get("total", 0) - pa7.get("debt", 0))) < 0.01,
+          str(pa7))
     cap7 = pl7.get("capacity") or {}
     check("UI-06", "快照给出机队利用率（占机小时与航段）",
           cap7.get("hours_cap", 0) > 0 and 0 < cap7.get("hours_used", 0) <= cap7["hours_cap"]

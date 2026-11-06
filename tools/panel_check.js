@@ -88,6 +88,16 @@ function rivals(n, from = 2) {
     "无对手：标签 0 家 + 占位文案", `${tag.textContent} / ${html.slice(0, 40)}`);
 }
 
+// 3b) 玩家按名次插入对手榜并高亮
+{
+  const { html } = render({ rivals: rivals(5, 2), rivals_total: 5,
+    player: { name: "玩家航空", rank: 4, hubs: ["PEK"], routes: [1, 2, 3], market_cap: 9000 } });
+  const i2 = html.indexOf("AI-02"), iMe = html.indexOf("玩家航空"), i4 = html.indexOf("AI-04");
+  check(/<tr class="me">/.test(html) && /玩家航空（你）/.test(html)
+    && i2 >= 0 && iMe > i2 && i4 > iMe,
+    "玩家按名次插入对手榜并高亮", html.replace(/\s+/g, " ").slice(0, 200));
+}
+
 // 4) 旧后端没有 rivals_total 字段时按列表长度兜底
 {
   const { tag, rows } = render({ rivals: rivals(3) });
