@@ -2,6 +2,7 @@
 """HTTP 层：路由分发、JSON 读写、静态文件。"""
 
 import json
+import threading
 from http.server import BaseHTTPRequestHandler
 
 from meta import build_meta
@@ -77,6 +78,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/control":
             res = self.session.control(body.get("paused"), body.get("speed"))
             return self._send(200, res)
+        if path == "/api/boot_continue":
+            return self._send(200, self.session.boot_continue())
         if path == "/api/new_game":
             try:
                 res = self.session.new_game(str(body.get("mode") or ""))

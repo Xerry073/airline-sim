@@ -60,6 +60,14 @@
   #rivalroutes .rrgroup:hover .rrpath{stroke:#e2ebf4;stroke-opacity:.9}
   #rivalroutes .rrhit{fill:none;stroke:transparent;pointer-events:stroke;vector-effect:non-scaling-stroke}
 
+  /* 开线选中起点：只强调经过该机场的航线，其余压暗 */
+  #routelayer .rgroup.focus .rmain{stroke-opacity:1}
+  #routelayer .rgroup.focus .rglow{stroke-opacity:.30}
+  #rivalroutes .rrgroup.focus .rrpath{stroke:#cfdae5;stroke-opacity:.85}
+  #rivalroutes .rrgroup.focus.contested .rrpath{stroke:#ffd76a;stroke-opacity:.9}
+  #routelayer .rgroup.dim,
+  #rivalroutes .rrgroup.dim{opacity:.12}
+
   #labels{pointer-events:none}
   #labels text{font:600 11px -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
                fill:#9fb3c8;paint-order:stroke;stroke:#071018;stroke-width:3px;
@@ -85,7 +93,10 @@
   .kpi{background:#111923;border:1px solid var(--line);border-radius:5px;padding:6px 8px}
   .kpi .l{color:var(--dim);font-size:10px}
   .kpi .v{font-size:15px;font-variant-numeric:tabular-nums}
-  .pos{color:var(--ok)} .neg{color:var(--bad)}
+  .pos{color:var(--ok)} .neg{color:var(--bad)} .warn{color:#ffb37a}
+  .kpi .sub{font-size:10px;color:var(--dim);margin-top:2px;line-height:1.3}
+  #rivals tr.me td{color:#ffd866;font-weight:600;background:rgba(255,201,60,.08)}
+  #rivals tr.me td:first-child{border-left:2px solid #ffc93c}
 
   table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
   th,td{text-align:left;padding:4px 6px;border-bottom:1px solid #1b2531;font-size:11px}
@@ -114,6 +125,13 @@
   button.danger{border-color:#63353d;color:#ff9a9a;background:#21161a}
   button.danger:hover{border-color:var(--bad);color:#fff}
   button.mini{padding:1px 6px;font-size:10px;border-radius:4px}
+  #routes th{font-size:10px;padding:3px 4px;text-align:right}
+  #routes th:first-child{text-align:left}
+  #routes td{padding:3px 4px;font-size:10.5px;text-align:right;white-space:nowrap}
+  #routes td.seg{text-align:left;font-variant-numeric:normal}
+  #routes td.ac{color:var(--dim)}
+  #routes .bar{min-width:26px}
+  #routes tr.rhead th{position:static}
   .rrow{cursor:pointer}
   .rrow:hover td{background:#172331}
 

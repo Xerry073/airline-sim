@@ -18,7 +18,7 @@ function tipHTML(m){
     <div class="hint">${m.stop?"经停点 · Alt+左键取消"
       :(m.selIndex===0?"起点 · 左键点终点 · Alt+左键加经停"
       :(m.selIndex===1?"终点 · 右键可重选起点"
-      :"右键=起点 · 左键=终点 · Alt+左键=经停"))}</div>`;
+      :"左键=查看详情 · 右键=设为起点 · Alt+左键=经停"))}</div>`;
 }
 
 function showAirportTip(m,e){
@@ -37,7 +37,7 @@ function showRouteTip(r,e,kind,contested){
   const sub=rival
     ? `${escHTML(r.airline||"AI")} · ${r.ac_type||""}`
     : `${r.ac_type||""} · 我的航线 #${r.id}`;
-  t.innerHTML=`<div class="t1"><code>${r.segments.join(" → ")}</code></div>
+  t.innerHTML=`<div class="t1"><code>${r.segments.join(" ＝ ")}</code></div>
     <div class="sub">${sub}</div>
     <div class="row"><span>每日班次</span><b>${r.daily_flights}</b></div>
     <div class="row"><span>载客率</span><b>${lf}%</b></div>
@@ -105,8 +105,15 @@ function pickOrigin(iata){
   if($("#wiz").classList.contains("on")) closeWizard();
   sel=[iata]; stopover=null;
   if((STATE.airports||[]).filter(x=>x.city===a.city).length>1) expandedCity=a.city;
-  toast(`${iata} 已设为起点 · 左键点终点 · Alt+左键加经停`);
-  renderMarkers(); drawLabels();
+  const mine=((STATE.player&&STATE.player.routes)||[])
+    .filter(x=>(x.segments||[]).includes(iata)).length;
+  const ai=(((STATE&&STATE.opponent_routes)||[]))
+    .filter(x=>(x.segments||[]).includes(iata)).length;
+  let msg=`${iata} 已设为起点 · 左键点终点 · Alt+左键加经停`;
+  if(mine) msg+=` · 我的 ${mine} 条`;
+  if(ai) msg+=SHOW_AI?` · AI ${ai} 条`:` · AI ${ai} 条（开关未开）`;
+  toast(msg);
+  renderMarkers(); drawLabels(); applyRouteFocus();
 }
 
 function pickStopover(iata){
@@ -115,21 +122,22 @@ function pickStopover(iata){
   if(iata===origin){ toast("经停点不能与起点相同",true); return; }
   if(AP[origin]&&AP[origin].city===a.city){ toast("同城机场不能互相经停",true); return; }
   stopover = stopover===iata ? null : iata;
-  if(!stopover){ toast("已取消经停点"); renderMarkers(); drawLabels(); return; }
+  if(!stopover){ toast("已取消经停点"); renderMarkers(); drawLabels(); applyRouteFocus(); return; }
   toast(`经停点 ${stopover} · 再 Alt+左键一次取消`);
   if(sel.length===2) openWizard(routeSegments(sel[0],stopover,sel[1]));
   else { renderMarkers(); drawLabels(); }
+  applyRouteFocus();
 }
 
 function pickDestination(iata){
-  if(!sel.length){ toast("右键点击机场选择航线起点",true); return; }
+  if(!sel.length){ openOp("airport",iata); return; }
   const origin=sel[0], a=AP[iata];
   if(iata===origin){ toast("起点与终点不能相同",true); return; }
   if(AP[origin]&&AP[origin].city===a.city){ toast("同城机场之间不构成航线",true); return; }
   if(stopover===iata) stopover=null;
   sel=[origin,iata];
   openWizard(routeSegments(origin,stopover,iata));
-  renderMarkers(); drawLabels();
+  renderMarkers(); drawLabels(); applyRouteFocus();
 }
 
 function routeSegments(origin,stop,dest){
@@ -139,7 +147,7 @@ function routeSegments(origin,stop,dest){
 function clearSelection(){
   sel=[]; stopover=null; expandedCity=null; hoverId=null;
   closeWizard(); hideTip();
-  renderMarkers(); drawLabels();
+  renderMarkers(); drawLabels(); applyRouteFocus();
 }
 
 function closeWizard(){ $("#wiz").classList.remove("on"); }
@@ -148,7 +156,7 @@ function closeWizard(){ $("#wiz").classList.remove("on"); }
 async function openWizard(segs){
   const w=$("#wiz");
   const stop=segs.length>2?segs[1]:null;
-  const head=`<h3><span>${segs.join(" → ")}</span><span class="x" onclick="clearSelection()">✕</span></h3>`;
+  const head=`<h3><span>${segs.join(" ＝ ")}</span><span class="x" onclick="clearSelection()">✕</span></h3>`;
   w.classList.add("on");
   w.innerHTML=head+`<div class="hint">正在查询市场…</div>`;
 
@@ -169,7 +177,7 @@ async function openWizard(segs){
     const total=legs.reduce((s,x)=>s+x.km,0);
     const direct=Math.round(haversineKm(AP[segs[0]],AP[segs[segs.length-1]]));
     body=`<div class="kv"><span>航段</span><b>${legs.length} 段 · 1 个经停</b></div>
-      ${legs.map(l=>`<div class="kv"><span>${l.from} → ${l.to}</span><b>${l.km} km</b></div>`).join("")}
+      ${legs.map(l=>`<div class="kv"><span>${l.from} ＝ ${l.to}</span><b>${l.km} km</b></div>`).join("")}
       <div class="kv"><span>总航程</span><b>${total} km</b></div>
       <div class="kv"><span>直飞距离</span><b>${direct} km</b></div>
       <div class="kv"><span>绕行系数</span><b>${direct?(total/direct).toFixed(2):"—"}</b></div>

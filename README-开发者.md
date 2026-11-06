@@ -54,7 +54,7 @@
 | `sim/goals.py` | 四目标判定、区域份额、月报质量、A–E 评级 |
 | `sim/game.py` | `Game`：逐日推进、玩家指令、快照、存档序列化 |
 | `sim/report.py` | `run` / `summarize` / `write_report` / CLI |
-| `sim/selftest.py` | 52 条验收自测 |
+| `sim/selftest.py` | 67 条验收自测 |
 | `web/index.html` | 页面结构 + 脚本加载顺序 |
 | `web/css/app.css` | 全部样式 |
 | `web/js/*.js` | 按加载顺序：map → routes → interaction → panels → saves → goals → app |
@@ -120,7 +120,8 @@ python server/app.py --port 8777 --ai 50
 | `--no-resume` | 关 | 启动时不恢复 `saves/autosave.json` |
 | `--mode` | 无 | `sandbox`/`goals`；省略则由页面开局选择 |
 
-`--cost-mult`：`1.0` 是标定基准（几乎不破产），`1.2` 附近才是可玩难度，`2.5` 是压力测试。
+`--cost-mult`：`1.0` 是当前默认（小规模玩家可盈亏平衡，AI 几乎不破产），`1.35` 起开始出现淘汰，`2.5` 是压力测试。
+成本系数本身在 `sim/config.py` 的 `ECON` 里；2026-11 参数轮下调过固定开销、折旧租赁与导航/起降/维护，原因是 3 机 8 线的满负荷玩家仍亏 0.37/日。
 
 ---
 
@@ -151,7 +152,8 @@ python server/app.py --port 8777 --ai 50
 | GET | `/api/state` | 世界快照（前端每秒轮询） |
 | GET | `/api/market?from=PEK&to=SHA` | 两机场之间的市场情报（开线向导用） |
 | GET | `/api/saves` | 本地存档列表 |
-| POST | `/api/new_game` | `{"mode":"sandbox"\|"goals"}` 重建第 0 天 |
+| POST | `/api/boot_continue` | `{}` 启动选择「继续上次对局」：清掉 boot 提示并恢复暂停状态 |
+| POST | `/api/new_game` | `{"mode":"sandbox"\|"goals"}` 重建第 0 天（同时清掉 boot 提示） |
 | POST | `/api/save` | `{"name":"..."}` 保存并命名 |
 | POST | `/api/load` | `{"id":"save_..."}` 载入 |
 | POST | `/api/delete_save` | `{"id":"save_..."}` 删除 |
@@ -170,11 +172,13 @@ python server/app.py --port 8777 --ai 50
 | `close_route` | `route_id` | 存在性；关线立即释放时刻 |
 | `set_price` | `route_id`、`price_index` | 0.50–1.50 |
 | `set_flights` | `route_id`、`daily_flights` | 1–14 且机队运力足够 |
+| `set_aircraft` | `route_id`、`ac_type` | 机型须在机队中；航程/跑道/经停九项/日占机 |
 | `add_hub` | `airport` | 三档门槛 + 开设费 |
 | `buy_aircraft` | `ac_type`、`base`、`lease` | 现金或租赁额度 |
-| `sell_aircraft` | `aircraft_id` | 存在性 |
+| `sell_aircraft` | `aircraft_id` | 自有=出售（市价 85%）；租赁=退租（只退押金）；两者都不得吃穿所在基地运力 |
 | `take_loan` | `amount` | 授信额度 |
 | `rename_airline` | `name` | 2–20 字符、不可重名 |
+| `rebase_aircraft` | `aircraft_id`、`base` | 基地机场存在；调机后原基地运力不得被吃穿 |
 
 全部返回 `{"ok": bool, "reason": "失败原因"}`。
 
@@ -184,7 +188,11 @@ python server/app.py --port 8777 --ai 50
 tick            {day, paused, speed, seed}
 airports[]      {iata, city, lat, lon, scale, region, pax, slot_cap, slot_used}
 player          {name, alive, cash, debt, equity, reputation, market_cap, rank,
-                 hubs[], fleet[], routes[], kpi{pax,revenue,cost,ebitda}}
+                 hubs[], fleet[], routes[], kpi{pax,revenue,cost,ebitda},
+                 assets{cash,fleet,total,debt,equity,market_cap},
+                 costs{fuel,landing,nav,maint,depreciation,lease,staff,distribution,
+                       ground,hub_fixed,interest,idle,fixed_total,total},
+                 capacity{hours_used,hours_cap,segments_used,segments_cap}}
 player.routes[] {id, segments, daily_flights, ac_type, price_index, lf, rep, pax,
                  distance_km, revenue_M, cost_M, profit_M, margin,
                  prices[]{from, to, eco, biz}}
@@ -197,6 +205,7 @@ goals           {mode, mode_chosen, setup_required, deadline_day, days_left,
                  years_left, progress[], achieved_count, rating, scored,
                  settled, settlement}
 log[]           最近 40 条事件
+boot            启动选择：进程启动并恢复自动存档时为 {day,name,was_paused}，否则 null
 ```
 
 - `rivals[].rank` 是**全体存活公司**名次（与 `player.rank` 同口径），过滤自己后会留空档
@@ -209,16 +218,16 @@ log[]           最近 40 条事件
 ## 6. 测试
 
 ```bash
-python sim/selftest.py          # 52 条内核验收（FR 编号对齐需求文档）
+python sim/selftest.py          # 67 条内核验收（FR 编号对齐需求文档）
 node tools/asset_check.js       #  5 条：前端资源引用、加载顺序、语法、重名、顶层语句
-node tools/map_check.js         # 28 条：地图几何、分级、标签避让、大圆、日界线
+node tools/map_check.js         # 31 条：地图几何、分级、标签避让、大圆、日界线、开线焦点
 node tools/goal_check.js        #  8 条：目标/模式面板与 /api/new_game 开局
-node tools/panel_check.js       # 13 条：对手榜口径、AI 票价、我的航线竞争对照
+node tools/panel_check.js       # 23 条：对手榜（含玩家高亮）、AI 票价、竞争对照、换机型、固定开销、调机、退租、机场详情、机队利用、航线票价列
 node tools/route_gui_check.js   # 10 条：开线手势（右键起点 / 左键终点 / Alt+左键经停）
 python -m compileall -q server sim calibration
 ```
 
-当前记录：`52/52`、`5/5`、`28/28`、`8/8`、`13/13`、`10/10`，`compileall` 退出码 0。
+当前记录：`67/67`、`5/5`、`31/31`、`8/8`、`23/23`、`10/10`，`compileall` 退出码 0。
 
 ### 前端测试怎么工作
 

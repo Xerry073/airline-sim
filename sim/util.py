@@ -45,3 +45,14 @@ def slot_touches(segments):
             counts[code] = counts.get(code, 0) + 1
     return counts
 
+
+# 跑道等级是「该机场能起降的最大机型」：W 可起降宽体，S 只到窄体，R 只到支线。
+# 因此判定方向是「机型等级 ≤ 机场等级」，不是「机场等级恰好等于机型等级」。
+RUNWAY_RANK = {"R": 1, "S": 2, "W": 3}
+AC_CLASS_RANK = {"支线": 1, "窄体": 2, "宽体": 3}
+
+
+def runway_allows(airport, ac_class):
+    """该机场跑道等级是否允许该机型起降"""
+    return RUNWAY_RANK.get(airport.get("runway"), 0) >= AC_CLASS_RANK.get(ac_class, 99)
+

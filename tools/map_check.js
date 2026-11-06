@@ -22,7 +22,7 @@ if (!match) throw new Error("找不到 MAP_MATH 段");
 const M = new Function(
   match[1] +
   "\nreturn {VB,RADIUS,SCALE_RANK,MERGE_K,clamp,scaleRank,proj,haversineKm,gcPoints," +
-  "routePathD,routeWidth,routeMarketKeys,routeMarketSet,routeIsContested," +
+  "routePathD,routeWidth,routeMarketKeys,routeMarketSet,routeIsContested,routeTouches," +
   "lodRank,buildMarkers,markerLabel,layoutLabels,nearestMarker,fitView};"
 )();
 
@@ -188,6 +188,14 @@ check(M.routeIsContested(["CTU", "PEK"], aiMarkets, AP),
   "经停航段与直飞共享市场判定为竞争");
 check(!M.routeIsContested(["PEK", "CAN"], aiMarkets, AP),
   "无交集航线不判定为竞争");
+
+/* 开线焦点：航线是否经过选中的机场（起点/经停/终点任一命中即可） */
+check(M.routeTouches(["PEK", "SHA"], ["PEK"]) && M.routeTouches(["SHA", "PEK"], ["PEK"]),
+  "经过选中机场的航线被判定为连通（方向不敏感）");
+check(M.routeTouches(["PEK", "CTU", "LXA"], ["CTU"]),
+  "经停点也算连通该机场");
+check(!M.routeTouches(["PEK", "SHA"], ["CTU"]) && !M.routeTouches([], ["PEK"]),
+  "不经过选中机场的航线不判定为连通");
 
 console.log("\n" + (failed ? "FAILED" : "OK") + "  " + passed + " passed, " + failed + " failed");
 process.exit(failed ? 1 : 0);

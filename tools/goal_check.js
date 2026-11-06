@@ -122,8 +122,9 @@ function stateForSetup() {
     }));
     apiObj.renderGoalsOp();
     const h = dom.op.innerHTML;
-    check(/当前：沙盒模式/.test(h) && /选择目标模式/.test(h),
-      "沙盒面板：说明当前模式并提供切换到目标模式");
+    check(/当前：沙盒模式/.test(h) && /换成目标模式/.test(h)
+      && /id="restart_sandbox"/.test(h) && /开新对局/.test(h),
+      "沙盒面板：说明当前模式，提供重开沙盒与切换目标模式");
   }
   {
     const { apiObj, dom } = make(stateForGoals());

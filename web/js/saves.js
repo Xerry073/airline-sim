@@ -21,6 +21,14 @@ function renderSavesOp(){
         <span class="hintline">重启时页面会等待后端恢复</span>
       </div>
     </div>
+    <div class="opcard">
+      <h4>开新对局 <span>从第 0 天重开；不会删除已有存档</span></h4>
+      <div class="savehint">当前进度会被清空，但 <code>saves/</code> 里的手动存档留着，随时能载入回来。</div>
+      <div class="btnrow">
+        <button id="new_sandbox">新对局 · 沙盒</button>
+        <button id="new_goals">新对局 · 目标</button>
+      </div>
+    </div>
     <div class="sectionline"><span>已有存档</span><span id="save_count">…</span></div>
     <div class="savelist" id="savelist"><div class="empty">正在读取存档…</div></div>`;
 
@@ -62,6 +70,10 @@ function renderSavesOp(){
         <div class="savehint">后端已经停止，现在可以关闭浏览器。下次双击桌面「航空模拟」会自动恢复这次自动存档。</div>
       </div>`;
   };
+
+  const newSandbox=$("#new_sandbox"), newGoals=$("#new_goals");
+  if(newSandbox) newSandbox.onclick=()=>startNewGame("sandbox");
+  if(newGoals) newGoals.onclick=()=>startNewGame("goals");
 
   $("#restart_go").onclick=async()=>{
     if(!confirm("自动保存并重启后端？页面会自动等待后端恢复（约数秒）。")) return;

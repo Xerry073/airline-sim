@@ -1,10 +1,10 @@
 /* 目标模式：模式选择、四目标进度、A–E 结算 */
-async function startNewGame(mode){
+async function startNewGame(mode,skipConfirm){
   if(mode!=="sandbox"&&mode!=="goals") return;
   const routes=((STATE.player&&STATE.player.routes)||[]).length;
   const fleet=((STATE.player&&STATE.player.fleet)||[]).length;
   const progressed=STATE.tick.day>0||routes>0||fleet>1;
-  if(progressed&&!confirm("开始新对局会把当前进度重置为第 0 天，确定继续？")) return;
+  if(progressed&&!skipConfirm&&!confirm("开始新对局会把当前进度重置为第 0 天，确定继续？")) return;
   const res=await api("/api/new_game",{mode});
   if(!res.ok) return;
   SEEN_SETTLE=null;
@@ -55,10 +55,14 @@ function renderGoalsOp(){
         <div class="hintline">沙盒模式不追踪 FR-1102 的四个目标，也没有 A–E 结算；可随时存档退出。</div>
       </div>
       <div class="opcard">
-        <h4>开始目标模式 <span>会重置为第 0 天</span></h4>
-        <div class="savehint">目标模式固定同时追踪四个目标：市值进前三、区域霸主、高质高效、网络扩张。</div>
-        <div class="btnrow"><button class="primary" id="switch_goals">选择目标模式</button></div>
+        <h4>开新对局 <span>会重置为第 0 天</span></h4>
+        <div class="savehint">当前进度会被清空；旧的手动存档不会删除，之后可在「存档」面板载入。</div>
+        <div class="btnrow">
+          <button class="danger" id="restart_sandbox">重新开始沙盒</button>
+          <button class="primary" id="switch_goals">换成目标模式</button>
+        </div>
       </div>`;
+    $("#restart_sandbox").onclick=()=>startNewGame("sandbox");
     $("#switch_goals").onclick=()=>startNewGame("goals");
     return;
   }

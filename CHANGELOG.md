@@ -4,6 +4,584 @@
 
 ---
 
+## 2026-11-07 · 交互轮：游戏内可以开新对局了
+
+反馈：玩到一半想重开，界面上找不到入口——沙盒模式的「目标 / 模式」面板只有「切换到目标模式」，
+「存档」面板只有保存/退出/重启，开新局只能靠 `start.cmd -NoResume`。
+
+### 变更
+
+- **「目标 / 模式」面板（沙盒模式）**：新增「重新开始沙盒」，并把原按钮文案改成「换成目标模式」，
+  卡片标题改为「开新对局 · 会重置为第 0 天」
+- **「存档」面板**：新增「开新对局」卡片，两个按钮 `新对局 · 沙盒` / `新对局 · 目标`
+  （复用 `startNewGame`，带“会重置进度”的二次确认）
+- 两处都提示：**旧的手动存档不会被删除**，之后可在存档面板载入回来
+- 玩家手册「重开一局」补上这两个入口
+
+### 测试
+
+- `tools/goal_check.js` 断言更新：沙盒面板需同时出现「重新开始沙盒」与「换成目标模式」
+
+```text
+python sim/selftest.py        -> 67 / 67
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 31 / 31
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     -> 23 / 23
+node tools/route_gui_check.js -> 10 / 10
+```
+
+---
+
+## 2026-11-07 · 修复：quit.cmd 停不掉后端 + 控制台文字重影
+
+反馈：双击 `quit.cmd` 后窗口里中文变成「已已自自动动存存档档」，然后卡住，退不出去。
+
+### 根因（两个，叠在一起）
+
+1. **`server/api.py` 少了 `import threading`**（前后端拆分时漏掉）
+   - `/api/quit` 与 `/api/restart` 里 `threading.Timer(0.8, self.server.shutdown)` 抛 `NameError`
+   - 异常发生在响应已写回之后，所以脚本看到「已自动存档」，但**服务从未真正关闭**；
+     `quit.ps1` 等 10 秒后报超时，`quit.cmd` 因 `errorlevel 1` 停在 `pause`
+2. **`quit.ps1` / `start.ps1` 里的 `[Console]::OutputEncoding = UTF8`**
+   - 它会把控制台输出代码页切成 65001，在中文 Windows 的旧式控制台里导致 CJK 字形重影
+     （截图里的「已已自自动动」）
+
+### 变更
+
+- `server/api.py`：补 `import threading`；`/api/quit`、`/api/restart` 恢复正常
+- `quit.ps1`
+  - 删掉 `OutputEncoding` 覆盖，中文回到控制台原生代码页渲染
+  - 新增兜底：接口返回 ok 但 10 秒后端口仍在监听时，用 `Get-NetTCPConnection` 找到占用者，
+    若进程名是 `python*` 就强制结束并正常退出（对旧版后端也有效）
+- `start.ps1`：同样删掉 `OutputEncoding` 覆盖（顺手修掉一次误操作导致的 113 处 `\r\r\n`）
+- 玩家手册 FAQ 增加「quit.cmd 停不掉 / 文字重影」条目
+
+### 验证（临时副本 + 8795 端口，start.ps1 拉起 → quit.ps1 退出）
+
+```text
+启动后 /api/health → 200
+quit.ps1 -Port 8795 → exit 0，用时 5s，端口关闭，无残留 python 进程
+输出：已自动存档，正在停止后端… / 后端已停止，可以关闭浏览器。
+```
+
+### 测试
+
+```text
+python sim/selftest.py        -> 67 / 67
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 31 / 31
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     -> 23 / 23
+node tools/route_gui_check.js -> 10 / 10
+```
+
+---
+
+## 2026-11-07 · 交互轮：启动时先选「继续上次对局 / 开新对局」
+
+反馈：启动就直接接着旧档跑，没有选择余地；想开新局还得记得加 `-NoResume`。
+
+### 变更
+
+- **后端**（`server/session.py`、`server/api.py`）
+  - 进程启动恢复 `autosave` 后，先 `paused = true` 并设置 `boot_choice = {day, name, was_paused}`
+  - `GET /api/state` 新增 `boot` 字段（仅启动后待选择时非空）
+  - 新增 `POST /api/boot_continue`：清掉 `boot` 提示，按存档时的暂停状态恢复
+  - `POST /api/new_game` 也会清掉 `boot` 提示
+- **前端**（`web/js/panels.js`、`web/js/app.js`、`web/js/goals.js`）
+  - 首次拿到 `boot` 时弹出「开始游戏」面板：继续（第 N 天）／开新对局·沙盒／开新对局·目标／载入其他存档…
+  - 开新对局走面板时跳过「会重置进度」的二次确认（已经在这个面板里选过了）
+  - 面板只弹一次（`BOOT_PROMPTED`），关掉后仍可用顶栏速度键与存档面板操作
+- **文档**：玩家手册新增「启动时的选择」；开发者文档补 `/api/boot_continue` 与 `boot` 字段
+
+### 验证（临时副本 + 8791 端口实测）
+
+```text
+启动后  GET /api/state      → boot={"day":720,"name":"自动存档","was_paused":true}，paused=true
+继续    POST /api/boot_continue → {"ok":true,"paused":true}，再次 GET 时 boot=null
+开新局  POST /api/new_game  → boot=null，day=0
+```
+
+### 测试
+
+```text
+python sim/selftest.py        -> 67 / 67
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 31 / 31
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     -> 23 / 23
+node tools/route_gui_check.js -> 10 / 10
+```
+
+---
+
+## 2026-11-07 · 视觉轮：航线航段分隔符由箭头改为等号
+
+反馈：航线显示里的 `→` 太像「流程箭头」，读起来以为是「飞往」，希望换成 `＝`。
+
+### 变更
+
+- 所有**航段拼接**改用全角等号（`PEK＝SHA`）：
+  `web/js/app.js`（侧栏航线表与提示）、`web/js/interaction.js`（航线浮层、开线向导标题、经停分段）、
+  `web/js/panels.js`（航线下拉、竞争对照、航段、确认框、数据看板）
+- 后端事件日志同步（`sim/game.py`）：开通/关闭航线、更换机型的航段串、存档迁移报错
+- 玩家手册里的经停示例同步改成 `PEK＝CTU＝LXA`
+- **保留**非航段语义的箭头：面板导航（「存档 → 保存并重启」）、排序标签（`高→低`）、
+  注释与文档里的说明性箭头
+
+### 测试
+
+```text
+python sim/selftest.py        -> 67 / 67
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 31 / 31
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     -> 23 / 23
+node tools/route_gui_check.js -> 10 / 10
+```
+
+---
+
+## 2026-11-07 · 交互轮：侧栏航线表补上机型与票价
+
+反馈：侧栏「航线」只有 航段 / 班次 / 价格指数 / 进度条，看不出这条线用什么机型飞、票价多少；
+进度条也没标注是客座率。
+
+### 变更
+
+- **航线表改成五列**（`web/js/app.js`、`web/css/app.css`）
+  - 表头：`航线 / 班次 / 机型 / 票价 / 客座`（✕ 关线保持在最后一列）
+  - **票价**取该航线主 OD（首站→末站）的**经济舱**票价，经停航线不会误取第一段
+  - 价格指数从列里移到行的悬停提示（`PEK→SHA · 价格指数 0.97 · 客座率 87%`）
+  - 进度条加 `title="客座率 87%"`，并收窄以给新列腾空间
+- **纯函数 `routeFareEco(r)`**：主 OD 票价取值（旧后端缺 `prices` 时返回 null，显示 —）
+
+### 测试
+
+- `tools/panel_check.js` 21 → **23**：经停航线取首→末主 OD、缺 prices 返回 null
+
+```text
+python sim/selftest.py        -> 67 / 67
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 31 / 31
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     -> 23 / 23
+node tools/route_gui_check.js -> 10 / 10
+```
+
+---
+
+## 2026-11-07 · 信息轮：加「总资产」，对手榜把玩家高亮进去
+
+反馈：想和对手比资产，但「我的公司」只有现金和负债；对手榜里又完全看不到自己。
+
+### 变更
+
+- **快照新增 `player.assets`**（`sim/game.py`）
+  - `total` = 现金 + 机队现值；`equity` = 总资产 − 负债；另给 `cash / fleet / debt / market_cap`
+- **KPI 新增「总资产 ¥M」**（`web/js/app.js`）
+  - 大字总资产，小字给净资产；悬停说明「总资产 = 现金 + 机队现值，净资产 = 总资产 − 负债」
+- **对手榜把玩家按名次插进去并高亮**（`web/js/app.js`、`web/css/app.css`）
+  - 玩家行：`tr.me`，黄色文字 + 淡黄底 + 左侧竖线，名称后缀「（你）」
+  - 与对手同一套排序（全体现存公司名次），所以能直接看出「我和第 3 名差多少」
+  - 原有「TOP 20/50」标签不变，提示文案改为「高亮的是你自己」
+
+### 测试
+
+- `sim/selftest.py` 66 → **67**：总资产 = 现金 + 机队、净资产 = 总资产 − 负债
+- `tools/panel_check.js` 20 → **21**：玩家按名次插入榜单且落在正确位置、带 `tr.me` 高亮
+
+```text
+python sim/selftest.py        -> 67 / 67
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 31 / 31
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     -> 21 / 21
+node tools/route_gui_check.js -> 10 / 10
+```
+
+---
+
+## 2026-11-07 · 可用性轮：「日占机」改名为「机队利用」并列出各机型
+
+反馈：买了 777-300ER 之后，KPI 还是显示「A320 100%」，看不出新飞机是闲置的；
+而且「日占机」这个词读不懂。
+
+### 变更
+
+- **KPI 格改版**（`web/js/app.js`、`web/css/app.css`）
+  - 标题「日占机」→「**机队利用**」，数值从「最紧张机型」改成**总体百分比**
+  - 下方新增小字，按机型列出利用率：`A320 100% · B77W 0%`（新买但没排班的机型也会出现）
+  - 颜色：任一机型满载/超载标红、≥85% 标黄、其余绿色
+  - 悬停提示写明口径：每天被航线占用的飞机小时 ÷ 上限，每架 16 h / 8 段，按机型和连通块分开算
+- **纯函数 `fleetUsageSummary(cap)`**：把汇总逻辑从 render 里抽出来，便于测试
+- **机队面板**：运力池上方补一句口径说明
+
+### 测试
+
+- `tools/panel_check.js` 18 → **20**：汇总百分比、各机型小字、空机队占位
+
+```text
+python sim/selftest.py        -> 66 / 66
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 31 / 31
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     -> 20 / 20
+node tools/route_gui_check.js -> 10 / 10
+```
+
+---
+
+## 2026-11-07 · 交互轮：左键点机场打开「机场详情」
+
+反馈：改成右键选起点后，左键点机场只会弹一句「右键选择起点」，想看机场信息反而没入口。
+
+### 变更
+
+- **左键点机场 = 查看详情**（`web/js/interaction.js`、`web/js/panels.js`）
+  - 未选起点时：打开「机场详情」面板（不再只弹 toast）
+  - 已选起点时：仍然是选终点并弹开线向导（行为不变）
+  - 面板内容：城市/区域/规模、年客流、时刻占用（已用/上限/百分比，≥90% 标黄）、
+    我的航线数、AI 航线数，以及经过该机场的我的航线清单（编号/航段/班次/载客率）
+  - 面板底部两个动作：「设为此航线起点」（等价右键）、「从这里开航线」（开线面板预填起点）
+- **悬停提示同步**：未选起点时显示「左键=查看详情 · 右键=设为起点 · Alt+左键=经停」
+
+### 测试
+
+- `tools/route_gui_check.js` 改为断言「未选起点左键 → 调用 openOp("airport", iata)」
+- `tools/panel_check.js` 17 → **18**：抽 `renderAirportOp()` 验证客流/时刻/航线数与两个按钮
+
+```text
+python sim/selftest.py        -> 66 / 66
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 31 / 31
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     -> 18 / 18
+node tools/route_gui_check.js -> 10 / 10
+```
+
+---
+
+## 2026-11-07 · 修正轮：运力池按「航段连通块」而不是「出发机场」
+
+反馈：一架停在 XIY 的飞机可以飞 `XIY–DEL`、`XIY–KMG`、`KMG–DEL` 三条线（后两条在 KMG 接得上），
+但按「机型 + 出发机场」分池会把 `KMG–DEL` 判成「KMG 没有驻扎飞机」而超载。
+
+### 根因
+
+上一版把「不在基地起飞的航线」一律视为瞬移。实际上只要航段能连成一条闭合链，同一架飞机就能串飞：
+`XIY→KMG→DEL→…` 只要接得上，就不需要每个机场都驻扎一架飞机。
+
+### 变更（`sim/model.py`）
+
+- 新增 `components(ac_type)`：把航线按航段建成无向图求连通分量，
+  每组的运力上限 = 16 h × **组内机场驻扎的该机型飞机数**
+- `excess_by_component()` / `fits_route()` 取代 `excess_by_base()` / `fits_route()`（按基地版）
+- 判定语义：
+  - 组内总时长 ≤ 组内飞机数 × 16 h → 合法（不再要求航线出发地有飞机）
+  - 与任何基地都不连通的组 → 组内 0 架飞机 → 开不出来
+  - 卖机/退租/调机/改班次/换机型仍走「允许补救、禁止恶化」
+- 快照 `capacity.pools[]` 改为 `{type, airports[], count, hours_used, hours_cap, …}`
+- 前端：运力池显示成 `A320 @ DEL/KMG/XIY × 1`；调机提示改为「同一连通块内可串飞」
+
+### 效果（玩家存档实测）
+
+8 条航线（PEK–PVG、PEK–XIY–KMG、PEK–DLC、PEK–ICN、PEK–NKG、SHA–XIY、XIY–DEL、DEL–KMG）
+其实全在一个连通块里：**3 架 A320 共 47.8 / 48.0 h，判定为正常**，
+不再是三个互相独立的「0 容量超载池」。
+
+### 基准（50 AI × 720 日）
+
+| 指标 | 按出发机场 | 按连通块 |
+|---|---|---|
+| 存活 | 49 / 50 | 50 / 50 |
+| 航线条数 / 机队 | 488 / 439 | 677 / 495 |
+| 全网载客率 | 87.8% | 88.4% |
+| 行业 EBITDA 率 | 14.0% | 12.7% |
+| 日收入 / EBITDA | 248.5 / 34.9 | 308.1 / 39.0 |
+
+行业恢复到大盘量级（677 条 vs 696 条），同时仍然禁止瞬移。
+
+### 测试
+
+- `sim/selftest.py` 66 条：其中两条改写为「KMG 不驻扎飞机也能串飞」与「不连通的组不能开线」
+
+```text
+python sim/selftest.py        -> 66 / 66
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 31 / 31
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     -> 17 / 17
+node tools/route_gui_check.js -> 10 / 10
+```
+
+---
+
+## 2026-11-07 · 修正轮：租赁机只能退租；卖机/退租不得吃穿运力
+
+反馈：租赁来的 E190 竟然有「出售」按钮，而且运力已经 47.8/32 h 还允许减飞机，等于放任超载。
+
+### 变更
+
+- **租赁与自有区分**（`sim/model.py`、`sim/game.py`、`web/js/panels.js`）
+  - 自有飞机 → 「出售」，按市价 85% 回笼现金（原逻辑不变）
+  - 租赁飞机 → 「退租」，只退还押金（3 个月租金口径，与买入时一致），**不产生二手收入**
+  - `sell_aircraft` 返回值新增 `kind: "sell" | "return"`，日志分别记「出售飞机」「飞机退租」
+  - 机队表头「出售可得」改为「出手/退租」，租赁行显示「退押金」
+- **运力护栏**：卖机/退租前先试算 (机型, 基地) 池，若会让在飞航线吃穿运力则直接拒绝
+  - 报错写明池子占用与建议：「PEK 的 A320 运力会被吃穿：已占 26.2/32 h…先给这个基地的航线减班或关线」
+  - 与开线、改班次、换机型、调机共用同一套「允许补救、禁止恶化」判据
+- **文档**：玩家手册补「出售/退租」一行；README-开发者指令表补 `sell_aircraft` 的新语义
+
+### 测试
+
+- `sim/selftest.py` 64 → **66**：卖机会吃穿运力时被拒；租赁机退租只退押金且不留在机队
+- `tools/panel_check.js` 16 → **17**：机队面板对租赁机显示退租/押金
+
+```text
+python sim/selftest.py        -> 66 / 66
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 31 / 31
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     -> 17 / 17
+node tools/route_gui_check.js -> 10 / 10
+```
+
+---
+
+## 2026-11-07 · 修正轮：运力按「机型 + 基地」分池，禁止飞机瞬移
+
+反馈：租赁的 E190 空闲，却开不了新航线——因为运力是按全机队小时池算的，
+A320 航线把 E190 的时间也吃掉了；而且同一架飞机一天可以在两个无关机场之间「瞬移」。
+
+### 根因
+
+`capacity_hours()` 用 `16 h × 机队总数` 做分母，`route_hours()` 按航线的机型算分子，
+两者之间没有「哪架飞机在哪个机场」的对应关系。于是：
+
+- 2 架 A320 能飞 47.8 h（上限本该 32 h），多出来的时间是 E190 的
+- 8 条航线里有 3 条从 SHA/XIY/DEL 起飞，而这些机场根本没有基地飞机
+
+### 变更
+
+- **运力池改为 (机型, 基地)**（`sim/model.py`）
+  - `base_capacity(type, base)`、`usage_by_base()`、`excess_by_base()`、`fits_route()`
+  - 一架飞机一天只能从一个机场起飞；航线都是往返，所以出发机场就是它的基地
+  - 校验统一走「允许补救、禁止恶化」：超载的旧存档仍可减班/关线/换机型，但不能更糟
+- **`open_route` 增加两道校验**（`sim/game.py`）
+  - 机队里必须有该机型（原来没查，理论上可以拿没买过的机型开线）
+  - 该 (机型, 出发机场) 池要装得下；报错会写清哪个池、已占多少、需要多少
+- **新增 `rebase_aircraft` 调机**（`sim/game.py`、`web/js/panels.js`）
+  - 把飞机挪到任意机场，费用按距离与 MTOW 计（PEK→SHA 约 0.3 ¥M）
+  - 调机后原基地运力不得被吃穿（在飞的航线要先减班/关线）
+  - 机队面板新增「调机」卡片；指令 `rebase 12 SHA`
+- **买机基地不再限于枢纽**（`web/js/panels.js`）：基地下拉改成全部机场，
+  否则 SHA/XIY 这类出发地永远没法配飞机
+- **修跑道等级判定方向**（`sim/util.py`、`sim/ai.py`、`sim/game.py`）
+  - 原来 `支线: ("R",)`，等于 E190/ATR72 只能落 R 级机场——而全图只有 S/W，
+    结果换机型到 E190 永远报「跑道等级不满足」
+  - 改为「机型等级 ≤ 机场等级」：支线 ≤ S ≤ W，宽体只能落 W；直飞开线也补上这项校验
+- **AI 适配**（`sim/ai.py`）
+  - 开线前按 (机型, 机场) 检查运力；不够就买同型机，最多补 2 架
+  - 优先从「已有基地飞机」的城市机场出发；跑道不允许时降级到窄体
+
+### 测试
+
+- `sim/selftest.py` 58 → **64**：机型封顶、空闲机型可开线、未拥有机型、跑道方向、
+  异地无基地不能开线、调机后可以
+- `tools/panel_check.js` 15 → **16**：航线面板显示该基地运力池、机队面板有调机入口
+
+### 基准（50 AI × 720 日）
+
+| 指标 | 改前 | 改后 |
+|---|---|---|
+| 存活 | 49 / 50 | 49 / 50 |
+| 航线条数 / 机队 | 769 / 513 | 488 / 439 |
+| 全网载客率 | 87.4% | 87.8% |
+| 行业 EBITDA 率 | 14.5% | 14.0% |
+| 经停航线占比 | 4% | 19% |
+
+行业规模变小是预期的：每条航线都要有一座「停着飞机」的机场，扩张变慢、网络更集中在基地。
+
+> 旧存档里已经超载的 (机型, 基地) 池会显示为红色「超载」，新开线会被拦下；
+> 处理办法：关线/减班腾出运力，或调机/买机补上——这正是这次要复现的现实约束。
+
+---
+
+## 2026-11-06 · 参数轮：下调成本系数，让小规模航司能盈利
+
+背景：玩家 3 架飞机、8 条航线、机队占机 99.6%、平均载客率 89.8%，可归集利润合计
+0.32 ¥M/日，但公司 EBITDA 仍是 −0.37/日。固定开销 0.775（人工 0.499 / 枢纽 0.080 /
+折旧 0.060 / 租赁 0.136）把小航司一刀砍死；AI 因为规模大（7 机、9 线）反而普遍盈利。
+
+### 变更（`sim/config.py` 的 `ECON`）
+
+| 系数 | 原值 | 新值 | 说明 |
+|---|---|---|---|
+| `staff_base_M_day` | 0.15 | **0.08** | 总部基础人工 |
+| `staff_per_aircraft_M_day` | 0.05 | **0.030** | 每架飞机的人工 |
+| `staff_per_segment_M_day` | 0.010 | **0.006** | 每航段的人工 |
+| `hub_fixed_by_scale` | XL .08 / L .06 / M .04 / S .02 / R .01 | **XL .05 / L .04 / M .025 / S .012 / R .006** | 枢纽固定费整体降约 38% |
+| `idle_cost_M_day` | 0.02 | **0.01** | 闲置成本 |
+| `depreciation_years` | 20 | **28** | 折旧年限（按你最初的想法也降了折旧） |
+| `residual` | 0.10 | **0.15** | 残值率 |
+| `lease_rate_month` | 0.0055 | **0.0038** | 租赁率 |
+| `nav_rate_M_per_km` | 1.0e-5 | **0.8e-5** | 航路导航费 |
+| `landing_base_M` | 0.008 | **0.0068** | 起降费基准 |
+| `maint_load_factor` | 1.40 | **1.25** | 维护成本系数 |
+| 燃油 / 分销 / 地服 | — | **不变** | 保持标定值 |
+
+### 实测（同一份玩家存档，3 机 8 线）
+
+| 场景 | 改前 EBITDA | 改后 EBITDA |
+|---|---|---|
+| 按当前方式经营（1–2 班、指数 ~0.97） | −0.371 | **+0.007** |
+| 加密班次 + 价格指数 1.15 | +0.115 | **+0.484** |
+
+固定开销从 0.775 降到 0.474；航线利润合计从 0.145 升到 0.321（起降/导航/维护下调叠加）。
+
+### 基准场景（50 AI × 720 日 × 3000 ¥M，`python sim/simulate.py --days 720 --ai 50`）
+
+| 指标 | 改前 | 改后 |
+|---|---|---|
+| 存活 | 50 / 50 | 49 / 50 |
+| 航线条数 / 机队 | 663 / 482 | 769 / 513 |
+| 全网载客率 | 93.3% | 87.4% |
+| 行业 EBITDA 率 | 14.3% | 14.5% |
+| 日收入 / EBITDA | 407.7 / 58.3 | 374.0 / 54.1 |
+
+`--cost-mult` 难度实测（360 日）：1.0 → 0/50 破产，1.2 → 0/50，1.35 → 1/50。默认难度因此从
+「小航司必亏」变成「玩家能活、但要靠经营赶超 AI」。
+
+### 测试
+
+```text
+python sim/selftest.py        -> 58 / 58
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 31 / 31
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     -> 15 / 15
+node tools/route_gui_check.js -> 10 / 10
+```
+
+> 只动成本侧，票价与需求标定（`calibration/params.json`、`p_ref`）未改。
+
+---
+
+## 2026-11-06 · 可解释性轮：把「航线都赚、公司却亏」摆在面上
+
+背景：玩家开了 4 条航线、每条利润率都是正的，公司 EBITDA 却是 −0.48。查下来折旧只占成本
+4.7%，真正的原因是**机队只用了 46%**（22.3/48 小时）+ 价格指数偏低（0.96–1.05，同市场 AI 约 1.2）。
+按「不改数值、只把账说清楚」的决定，这一轮只做可见性。
+
+### 变更
+
+- **快照新增成本分项与利用率**（`sim/settle.py`、`sim/game.py`）
+  - `settle_day()` 把当日 12 项成本拆解存到 `al.last_costs`，随存档往返
+  - `player.costs{fuel…total, fixed_total}`、`player.capacity{hours_used,hours_cap,segments_used,segments_cap}`
+  - `fixed_total` 只含人工 + 枢纽固定 + 折旧 + 租赁 + 利息 + 闲置，即可归集成本之外的部分
+- **侧栏 KPI 增加「日占机」**（`web/js/app.js`、`web/css/app.css`）
+  - 显示 `22.3/48h`，≥75% 绿、<50% 黄；标题说明固定开销按机队发生
+- **航线管理增加「公司固定开销」卡片**（`web/js/panels.js`）
+  - 人工 / 枢纽 / 折旧 / 租赁 四项明细，合计 `fixed_total`
+  - 「全部航线利润合计」「覆盖固定开销后」两行直接给出差额（正绿负红）
+  - 附机队占机率与一段说明：航线利润只扣可归集成本，固定开销摊不薄就是亏
+- **文档**：玩家手册新增「为什么每条航线都赚钱，公司还是亏」；KPI 与快照契约同步
+- **测试**
+  - `sim/selftest.py` 56 → **58**：成本分项齐全且 `fixed_total` 自洽；利用率字段在合理区间
+  - `tools/panel_check.js` 14 → **15**：固定开销卡片、利润合计、占机率文案
+
+### 测试
+
+```text
+python sim/selftest.py        -> 58 / 58
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 31 / 31
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     -> 15 / 15
+node tools/route_gui_check.js -> 10 / 10
+```
+
+### 说明
+
+数值（`ECON`）一个都没改：折旧年限、残值、人工、租赁率维持原样。这一轮只是把
+「固定开销 vs 航线利润」和「机队利用率」变成可读的数字。
+
+---
+
+## 2026-11-06 · 运营轮：航线可以换机型
+
+目的：原来一条航线开通时机型就定死了，想从小飞机换大飞机只能关线重开（还要吃时刻与
+口碑的损失）。现实中航司按季节换机型是常规操作。
+
+### 变更
+
+- **新增指令 `set_aircraft`**（`sim/game.py`）
+  - `{route_id, ac_type}` → 换机型；机队里没有该机型时拒绝（只能在自己运营的型号间调机）
+  - 校验：机型存在；2 段航线直接走单段航程 + 跑道等级校验，经停航线走完整
+    `validate_stopover()`（航程/跑道/绕行/16h）；换更慢的机型后再验一次机队日占机
+  - 换成同一机型是空操作（`changed: false`），不写日志
+  - 成功写一条「更换机型」事件日志
+- **航线管理面板**（`web/js/panels.js`）
+  - 新增「机型」卡片：下拉只列**机队已有型号 + 当前机型**，每个选项带座位与航程
+  - 选中后实时显示「最长航段 X km · 该机型航程 Y km」，超出时标红提示
+  - 「更换机型」按钮调用 `set_aircraft`，失败原因由 `api()` 弹出
+- **高级指令**：`ac 3 B789`（`web/js/app.js`），教程面板同步加一行
+- **测试**
+  - `sim/selftest.py` 52 → **56**：换机型成功、同机型空操作、机队没有该机型被拒、机型不存在被拒
+  - `tools/panel_check.js` 13 → **14**：下拉只列机队型号、带更换按钮
+
+### 测试
+
+```text
+python sim/selftest.py        -> 56 / 56
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 31 / 31
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     -> 14 / 14
+node tools/route_gui_check.js -> 10 / 10
+```
+
+> 换机型不买卖飞机：机队规模与现金都不变，改变的只是这条航线由哪种机型执飞。
+
+---
+
+## 2026-11-06 · 交互轮：选中起点后聚焦该机场已连通的航线
+
+目的：右键选完起点，玩家最想知道的是「这个机场已经连通了哪里、还有哪些方向空着」。
+原来所有航线一律同亮度，AI 航线还会跟自己的航线互相盖住。
+
+### 变更
+
+- **`applyRouteFocus()`**（`web/js/routes.js`）
+  - 只要 `sel`（起点/终点）或经停点非空，就按「航线是否经过这些机场」给每个航线节点打
+    `.focus` / `.dim`
+  - 玩家航线：命中的保持原色并提亮（蓝=我的、黄=竞争），未命中的压到 12% 透明度
+  - AI 航线：开关打开时同样处理（灰=普通、暗黄=竞争），未命中的压到 12%
+  - 在 `syncRoutes()` / `syncRivalRoutes()` 末尾以及每个选择动作后调用，刷新与切换开关都不会丢焦点
+- **纯函数 `routeTouches(segments, codes)`**（`web/js/map.js`，放进 `MAP_MATH` 段便于抽取测试）
+- **选中起点的提示带条数**：`PEK 已设为起点 · 我的 2 条 · AI 5 条`；
+  AI 航线开关没开时提示 `AI 5 条（开关未开）`，不至于让人以为这个机场没人飞
+- **样式**（`web/css/app.css`）：`.focus` 提亮、`.dim` 压暗，过渡 0.2s
+
+### 测试
+
+- `tools/map_check.js` 28 → **31**：`routeTouches` 的方向不敏感、经停点命中、无关机场不命中
+
+```text
+python sim/selftest.py        -> 52 / 52
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 31 / 31
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     -> 13 / 13
+node tools/route_gui_check.js -> 10 / 10
+```
+
+> 焦点只是视觉强调，不改任何数值与判定；AI 航线是否出现仍由左上角「AI 航线」开关决定。
+
+---
+
 ## 2026-11-06 · 信息轮：玩家航线也输出 OD 票价，与对手并排比价
 
 目的：上一轮只显示了对手的价格指数，玩家还得自己换算才比得出「我贵多少」。现在两侧

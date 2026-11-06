@@ -1,6 +1,6 @@
 /* 运营面板：开线 / 航线 / 机队 / 枢纽 / 贷款 / 改名 / 教程 / 数据看板 */
 const HUB_FEE={XL:300,L:200,M:100,S:60,R:50};
-let OP={mode:null,routeId:null,hubCode:null,acCode:null,publicRoute:null,seq:0};
+let OP={mode:null,routeId:null,hubCode:null,acCode:null,publicRoute:null,airportCode:null,newFrom:null,seq:0};
 
 function aircraftList(){ return (META&&META.aircraft)||[]; }
 function aircraftOf(code){ return aircraftList().find(t=>t.code===code); }
@@ -27,7 +27,9 @@ const escHTML=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&
 function openOp(mode,arg){
   if(!STATE&&mode!=="help"){ toast("状态尚未加载",true); return; }
   OP={mode,routeId:null,hubCode:null,acCode:null,
-      publicRoute:mode==="public"?arg:null,seq:OP.seq+1};
+      publicRoute:mode==="public"?arg:null,
+      airportCode:mode==="airport"?(arg||"PEK"):null,
+      newFrom:null,seq:OP.seq+1};
   if(mode==="route"){
     const routes=(STATE.player&&STATE.player.routes)||[];
     OP.routeId=arg!=null?Number(arg):(routes[0]?routes[0].id:null);
@@ -56,7 +58,8 @@ function renderOp(){
   if(!OP.mode) return;
   const titles={new:"开航线",route:"航线管理",fleet:"机队管理",hub:"枢纽设置",
     loan:"贷款",company:"公司名称",help:"教程 / 高级指令",dashboard:"航线数据看板",
-    public:"航线详情",saves:"存档 / 读档",goals:"模式 / 目标"};
+    public:"航线详情",airport:"机场详情",saves:"存档 / 读档",goals:"模式 / 目标",
+    boot:"开始游戏"};
   $("#optitle").textContent=titles[OP.mode]||"运营操作";
   if(OP.mode==="new") renderNewRouteOp();
   else if(OP.mode==="route") renderRouteOp();
@@ -67,6 +70,8 @@ function renderOp(){
   else if(OP.mode==="help") renderHelpOp();
   else if(OP.mode==="dashboard") renderDashboardOp();
   else if(OP.mode==="public") renderPublicRouteOp();
+  else if(OP.mode==="airport") renderAirportOp();
+  else if(OP.mode==="boot") renderBootOp();
   else if(OP.mode==="saves") renderSavesOp();
   else if(OP.mode==="goals") renderGoalsOp();
 }
@@ -74,7 +79,7 @@ function renderOp(){
 /* ---------- 开航线 ---------- */
 function renderNewRouteOp(){
   const hubs=(STATE.player&&STATE.player.hubs)||[];
-  const from=hubs[0]||"PEK";
+  const from=OP.newFrom||hubs[0]||"PEK";
   const to=(STATE.airports.find(a=>a.city!==(AP[from]||{}).city)||{}).iata||"SHA";
   const defaultAc=(aircraftList().find(t=>t.code==="A320")||aircraftList()[0]||{}).code||"";
   $("#opbody").innerHTML=`
@@ -161,7 +166,7 @@ function renderRouteOp(){
   }
   if(!routes.some(r=>r.id===OP.routeId)) OP.routeId=routes[0].id;
   const r=routes.find(x=>x.id===OP.routeId);
-  const opts=routes.map(x=>`<option value="${x.id}"${x.id===r.id?" selected":""}>#${x.id} ${x.segments.join("→")}</option>`).join("");
+  const opts=routes.map(x=>`<option value="${x.id}"${x.id===r.id?" selected":""}>#${x.id} ${x.segments.join("＝")}</option>`).join("");
   const myMarkets=routeMarketSet([r],AP);
   const contested=routeIsContested(r.segments||[],
     routeMarketSet((STATE&&STATE.opponent_routes)||[],AP),AP);
@@ -197,7 +202,7 @@ function renderRouteOp(){
         ? `<b class="${gap<0?"warn":"pos"}">${gap<0?"低":"高"} ${Math.abs(gap*100).toFixed(0)}%</b>`
         : "";
       return `<div class="hintline" style="margin:-2px 0 6px 12px">
-        ${escHTML(p.from)} → ${escHTML(p.to)}：我 ¥${myEco.toLocaleString("zh-CN")} · 对手 ¥${rEco.toLocaleString("zh-CN")} ${tag}</div>`;
+        ${escHTML(p.from)} ＝ ${escHTML(p.to)}：我 ¥${myEco.toLocaleString("zh-CN")} · 对手 ¥${rEco.toLocaleString("zh-CN")} ${tag}</div>`;
     }).join("");
     /* 没有 OD 票价时（旧后端 / 无重叠 OD）退回价格指数比较 */
     let gapTag="";
@@ -207,15 +212,48 @@ function renderRouteOp(){
         gapTag=`<div class="hintline" style="margin:-2px 0 6px">价格指数${idx<myIdx?"比你低":"比你高"} ${Math.abs(gap).toFixed(0)}%（你的 ${myIdx.toFixed(2)}）</div>`;
     }
     return `<div class="req">
-        <span>${escHTML(o.airline||"AI")} · ${escHTML((o.segments||[]).join(" → "))}</span>
+        <span>${escHTML(o.airline||"AI")} · ${escHTML((o.segments||[]).join(" ＝ "))}</span>
         <b>${o.daily_flights||"—"} 班 · LF ${lf} · 指数 ${Number.isFinite(idx)?idx.toFixed(2):"—"}</b>
       </div>${fareRows}${gapTag}`;
   }).join("");
+
+  /* 换机型：只能选机队已有型号，当前机型始终列出 */
+  const fleetTypes=[...new Set(((STATE.player&&STATE.player.fleet)||[]).map(a=>a.type))];
+  if(!fleetTypes.includes(r.ac_type)) fleetTypes.unshift(r.ac_type);
+  const acOpts=fleetTypes.map(code=>{
+    const t=aircraftOf(code);
+    const label=t?`${t.name}（${t.seats} 座 · ${Math.round(t.range)} km）`:code;
+    return `<option value="${code}"${code===r.ac_type?" selected":""}>${label}</option>`;
+  }).join("");
+
+  /* 公司级固定开销 vs 全部航线利润：解释「每条航线都赚、公司却亏」 */
+  const profitSum=routes.reduce((s,x)=>s+(Number(x.profit_M)||0),0);
+  const costs=(STATE.player&&STATE.player.costs)||null;
+  const cap=(STATE.player&&STATE.player.capacity)||{};
+  const utilPct=cap.hours_cap?Math.round(100*cap.hours_used/cap.hours_cap):null;
+  const typeCap=((cap.pools)||[]).find(x=>x.type===r.ac_type
+    && (x.airports||[]).includes(r.segments[0]))||null;
+  const gap=costs?profitSum-costs.fixed_total:null;
+  const fixedCard=!costs
+    ? `<div class="opcard"><h4>公司固定开销 <span>待结算</span></h4>
+       <div class="hintline">成本分项在每日结算后生成；推进 1 天或重启后端后显示。</div></div>`
+    : `<div class="opcard">
+        <h4>公司固定开销 <span>¥${costs.fixed_total.toFixed(2)}M/日</span></h4>
+        <div class="req"><span>人工 / 枢纽 / 折旧 / 租赁</span>
+          <b>¥${costs.staff.toFixed(2)} · ¥${costs.hub_fixed.toFixed(2)} · ¥${costs.depreciation.toFixed(2)} · ¥${costs.lease.toFixed(2)}</b></div>
+        <div class="req"><span>全部航线利润合计</span><b class="pos">¥${profitSum.toFixed(2)}M/日</b></div>
+        <div class="req"><span>覆盖固定开销后</span>
+          <b class="${gap>=0?'pos':'neg'}">${gap>=0?"+":""}¥${gap.toFixed(2)}M/日</b></div>
+        ${utilPct!==null?`<div class="req"><span>机队日占机</span>
+          <b class="${utilPct>=75?'pos':(utilPct<50?'warn':'')}">${cap.hours_used}/${cap.hours_cap} h（${utilPct}%）</b></div>`:""}
+        <div class="hintline">航线利润只扣可归集成本；人工、枢纽、折旧、租赁按机队规模发生，与飞多少班无关。
+          占机率低说明飞机在闲置，固定开销摊不薄。</div>
+      </div>`;
   $("#opbody").innerHTML=`
     <div class="field"><label>选择航线</label><select id="rsel">${opts}</select></div>
     <div class="marketbox">
       <div class="mgrid">
-        <span>航段 <b>${r.segments.join(" → ")}</b></span>
+        <span>航段 <b>${r.segments.join(" ＝ ")}</b></span>
         <span>机型 <b>${r.ac_type}</b></span>
         <span>每日班次 <b>${r.daily_flights}</b></span>
         <span>价格指数 <b>${r.price_index.toFixed(2)}</b></span>
@@ -230,6 +268,7 @@ function renderRouteOp(){
       </div>
       <div class="hintline" style="margin-top:6px">利润率为航线可归集口径，不含折旧租赁与总部固定费用。</div>
     </div>
+    ${fixedCard}
     <div class="opcard">
       <h4>竞争者 <span>${contested?`${rivals.length} 条共享市场`:"暂无"}</span></h4>
       ${rivalRows||'<div class="empty">这条航线目前没有 AI 在飞同一个市场。</div>'}
@@ -252,6 +291,15 @@ function renderRouteOp(){
       </div>
       <div class="btnrow"><button id="fsave">应用班次</button></div>
     </div>
+    <div class="opcard">
+      <h4>机型 <span>当前 ${escHTML(r.ac_type)} · 只能在机队已有型号间换</span></h4>
+      <div class="range-row">
+        <select id="acsel">${acOpts}</select>
+      </div>
+      <div class="btnrow"><button id="acsave">更换机型</button><span class="hintline" id="achint"></span></div>
+      ${typeCap?`<div class="hintline">${(typeCap.airports||[]).join("/")} 这组的 ${typeCap.type} 运力 ${typeCap.hours_used}/${typeCap.hours_cap} h · 航段 ${typeCap.segments_used}/${typeCap.segments_cap}${typeCap.over?"（超载）":""}</div>`:""}
+      <div class="hintline">换机型不买卖飞机：新机型必须在机队里已有，航程/跑道/日占机由后端校验。</div>
+    </div>
     <div class="btnrow"><button class="danger" id="rclose">关闭这条航线</button><span class="hintline">关闭后时刻释放，不可撤销</span></div>`;
 
   $("#rsel").onchange=()=>{ OP.routeId=Number($("#rsel").value); renderOp(); };
@@ -269,8 +317,29 @@ function renderRouteOp(){
     const res=await api("/api/command",{action:"set_flights",args:{route_id:r.id,daily_flights:n}});
     if(res.ok){ toast("班次已更新"); await refresh(); renderOp(); }
   };
+  const acHint=()=>{
+    const sel=$("#acsel"), hint=$("#achint");
+    if(!sel||!hint) return;
+    const t=aircraftOf(sel.value);
+    let worst=0;
+    for(let i=0;i<r.segments.length-1;i++){
+      const a=AP[r.segments[i]], b=AP[r.segments[i+1]];
+      if(a&&b) worst=Math.max(worst,Math.round(haversineKm(a,b)));
+    }
+    if(!t){ hint.textContent=`最长航段 ${worst} km`; return; }
+    const over=worst>t.range*0.95;
+    hint.className=over?"hintline warn":"hintline";
+    hint.textContent=`最长航段 ${worst} km · 该机型航程 ${Math.round(t.range)} km${over?"（超出）":""}`;
+  };
+  if($("#acsel")){ $("#acsel").onchange=acHint; acHint(); }
+  if($("#acsave")) $("#acsave").onclick=async()=>{
+    const code=$("#acsel").value;
+    if(code===r.ac_type){ toast("机型未变"); return; }
+    const res=await api("/api/command",{action:"set_aircraft",args:{route_id:r.id,ac_type:code}});
+    if(res.ok){ toast(`机型已改为 ${code}`); await refresh(); renderOp(); }
+  };
   $("#rclose").onclick=async()=>{
-    if(!confirm(`确认关闭 #${r.id} ${r.segments.join("→")}？`)) return;
+    if(!confirm(`确认关闭 #${r.id} ${r.segments.join("＝")}？`)) return;
     const res=await api("/api/command",{action:"close_route",args:{route_id:r.id}});
     if(res.ok){ toast("航线已关闭"); closeOp(); await refresh(); }
   };
@@ -279,9 +348,80 @@ function renderRouteOp(){
 async function closeRouteConfirm(id){
   const r=((STATE.player&&STATE.player.routes)||[]).find(x=>x.id===id);
   if(!r) return;
-  if(!confirm(`确认关闭 #${r.id} ${r.segments.join("→")}？`)) return;
+  if(!confirm(`确认关闭 #${r.id} ${r.segments.join("＝")}？`)) return;
   const res=await api("/api/command",{action:"close_route",args:{route_id:r.id}});
   if(res.ok){ toast("航线已关闭"); await refresh(); }
+}
+
+/* ---------- 启动选择：继续上次对局 / 开新对局 ---------- */
+function renderBootOp(){
+  const b=(STATE&&STATE.boot)||{};
+  const day=Number(b.day)||0;
+  $("#opbody").innerHTML=`
+    <div class="marketbox">
+      <div class="sectionline"><span>检测到自动存档</span><span>第 ${day} 天</span></div>
+      <div class="hintline">${b.was_paused?"上次退出时处于暂停状态":"上次退出时正在运行"}；
+        后端已暂停，等你选择。</div>
+    </div>
+    <div class="btnrow" style="flex-wrap:wrap;gap:6px">
+      <button class="primary" id="boot_go" style="flex:1 1 100%">继续上次对局（第 ${day} 天）</button>
+      <button id="boot_sandbox" style="flex:1">开新对局 · 沙盒</button>
+      <button id="boot_goals" style="flex:1">开新对局 · 目标</button>
+      <button id="boot_saves" style="flex:1 1 100%">载入其他存档…</button>
+    </div>
+    <div class="hintline">开新对局不会删除旧存档，之后仍可在「存档」面板里载入。</div>`;
+  const go=$("#boot_go");
+  if(go) go.onclick=async()=>{
+    await api("/api/boot_continue",{});
+    closeOp(); await refresh();
+  };
+  const sb=$("#boot_sandbox");
+  if(sb) sb.onclick=async()=>{ await startNewGame("sandbox",true); closeOp(); };
+  const gl=$("#boot_goals");
+  if(gl) gl.onclick=async()=>{ await startNewGame("goals",true); closeOp(); };
+  const sv=$("#boot_saves");
+  if(sv) sv.onclick=()=>{ closeOp(); openOp("saves"); };
+}
+
+/* ---------- 机场详情（左键点机场） ---------- */
+function renderAirportOp(){
+  const code=OP.airportCode||"PEK";
+  const a=AP[code]||{};
+  const st=(STATE.airports||[]).find(x=>x.iata===code)||{};
+  const myRoutes=((STATE.player&&STATE.player.routes)||[])
+    .filter(r=>(r.segments||[]).includes(code));
+  const aiRoutes=((STATE.opponent_routes)||[])
+    .filter(r=>(r.segments||[]).includes(code));
+  const used=st.slot_used||0, cap=st.slot_cap||0;
+  const pct=cap?Math.round(100*used/cap):0;
+  $("#opbody").innerHTML=`
+    <div class="marketbox">
+      <div class="sectionline"><span>${escHTML(code)} · ${escHTML(a.city||st.city||"")}</span>
+        <span>${escHTML(a.region||st.region||"")} · ${escHTML(st.scale||a.scale||"—")} 级</span></div>
+      <div class="mgrid">
+        <span>年客流 <b>${Math.round(a.pax||st.pax||0)} 百万人次</b></span>
+        <span>时刻占用 <b class="${pct>=90?"warn":""}">${used}/${cap}（${pct}%）</b></span>
+        <span>我的航线 <b>${myRoutes.length} 条</b></span>
+        <span>AI 航线 <b>${aiRoutes.length} 条</b></span>
+      </div>
+    </div>
+    <div class="sectionline"><span>经过这个机场的我的航线</span><span>${myRoutes.length} 条</span></div>
+    ${myRoutes.length
+      ? myRoutes.map(r=>`<div class="req"><span>#${r.id} ${escHTML((r.segments||[]).join(" ＝ "))}</span>
+          <b>${r.daily_flights} 班 · LF ${Math.round((Number(r.lf)||0)*100)}%</b></div>`).join("")
+      : '<div class="empty">还没有经过这个机场的航线。</div>'}
+    <div class="btnrow" style="margin-top:10px">
+      <button class="primary" id="ap_origin">设为此航线起点</button>
+      <button id="ap_new">从这里开航线</button>
+      <button id="ap_close">关闭</button>
+    </div>
+    <div class="hintline">左键=查看机场详情 · 右键=设为航线起点 · Alt+左键=加经停点</div>`;
+  const originBtn=$("#ap_origin");
+  if(originBtn) originBtn.onclick=()=>{ closeOp(); pick(code,"origin"); };
+  const newBtn=$("#ap_new");
+  if(newBtn) newBtn.onclick=()=>{ closeOp(); openOp("new"); OP.newFrom=code; renderOp(); };
+  const closeBtn=$("#ap_close");
+  if(closeBtn) closeBtn.onclick=closeOp;
 }
 
 function renderPublicRouteOp(){
@@ -296,12 +436,12 @@ function renderPublicRouteOp(){
   const idx=Number(r.price_index);
   const fareRows=prices.map(p=>{
     const eco=Number(p.eco)||0, biz=Number(p.biz)||0;
-    return `<div class="req"><span>${escHTML(p.from||"")} → ${escHTML(p.to||"")}</span>
+    return `<div class="req"><span>${escHTML(p.from||"")} ＝ ${escHTML(p.to||"")}</span>
         <b>经济 ¥${eco.toLocaleString("zh-CN")} · 商务 ¥${biz.toLocaleString("zh-CN")}</b></div>`;
   }).join("");
   $("#opbody").innerHTML=`
     <div class="marketbox">
-      <div class="sectionline"><span>${escHTML((r.segments||[]).join(" → "))}</span>
+      <div class="sectionline"><span>${escHTML((r.segments||[]).join(" ＝ "))}</span>
         <span class="${contested?"pill":""}">${contested?"竞争航线":"暂无重叠"}</span></div>
       <div class="mgrid">
         <span>航空公司 <b>${escHTML(r.airline||"AI")}</b></span>
@@ -316,7 +456,7 @@ function renderPublicRouteOp(){
     ${fareRows||'<div class="empty">这条航线暂未公开票价</div>'}
     <div class="sectionline"><span>与我的航线关系</span><span>${overlaps.length} 条重叠</span></div>
     ${overlaps.length
-      ? overlaps.map(pr=>`<div class="req"><span>#${pr.id} ${escHTML((pr.segments||[]).join(" → "))}</span>
+      ? overlaps.map(pr=>`<div class="req"><span>#${pr.id} ${escHTML((pr.segments||[]).join(" ＝ "))}</span>
           <b class="warn">共享市场</b></div>`).join("")
       : '<div class="empty">这条 AI 航线目前与你的航线没有共享城市市场。</div>'}
     <div class="hintline" style="margin-top:10px">对手航线公开网络、班次、载客率与票价；成本、收入与财务不公开。</div>`;
@@ -332,14 +472,29 @@ function renderFleetOp(){
   const rows=fleet.map(a=>{
     const t=aircraftOf(a.type);
     return `<tr><td>${t?t.name:a.type}</td><td>${a.age.toFixed(1)}</td><td>${a.base||"—"}</td>
-      <td>${a.lease?"租赁":"自有"}</td><td>¥${acResale(a).toFixed(0)}M</td>
-      <td><button class="mini danger" data-sell="${a.id}">出售</button></td></tr>`;
+      <td>${a.lease?"租赁":"自有"}</td>
+      <td>${a.lease?"退押金":"¥"+acResale(a).toFixed(0)+"M"}</td>
+      <td><button class="mini ${a.lease?"":"danger"}" data-sell="${a.id}">${a.lease?"退租":"出售"}</button></td></tr>`;
   }).join("")||'<tr><td colspan="6" style="color:#78899c">暂无飞机</td></tr>';
-  const baseOpts=hubs.map(h=>`<option value="${h}">${h}${AP[h]?" · "+AP[h].city:""}</option>`).join("")
-    ||'<option value="">无枢纽</option>';
+  const baseOpts=airportOptions(hubs[0]||"");
+  /* 运力按机型分池：每架 16 h / 8 段，各机型之间不能互相借用 */
+  const byType=(p.capacity&&p.capacity.pools)||[];
+  const capRows=byType.map(b=>{
+    const t=aircraftOf(b.type);
+    const pct=b.hours_cap?Math.round(100*b.hours_used/b.hours_cap):0;
+    const cls=b.over?"neg":(pct>=85?"warn":(pct>0?"pos":""));
+    const where=(b.airports||[]).join("/")||"—";
+    return `<div class="req"><span>${t?t.name:b.type} @ ${where} × ${b.count}</span>
+      <b class="${cls}">${b.hours_used}/${b.hours_cap} h（${pct}%）· 航段 ${b.segments_used}/${b.segments_cap}${b.over?" · 超载":""}</b></div>`;
+  }).join("");
+  const acSelect=fleet.map(a=>`<option value="${a.id}">#${a.id} ${a.type} @ ${a.base||"—"}</option>`).join("")
+    ||'<option value="">暂无飞机</option>';
+
   $("#opbody").innerHTML=`
     <div class="sectionline"><span>现有机队</span><span>${fleet.length} 架</span></div>
-    <div class="fleetlist"><table><thead><tr><th>机型</th><th>机龄</th><th>基地</th><th>方式</th><th>出售可得</th><th></th></tr></thead>
+    ${capRows}
+    <div class="hintline" style="margin:2px 0 8px">每架飞机每天最多 16 h / 8 段；同一个航段连通块里的航线由块内基地的飞机串飞，跨块要调机。</div>
+    <div class="fleetlist"><table><thead><tr><th>机型</th><th>机龄</th><th>基地</th><th>方式</th><th>出手/退租</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table></div>
     <div class="opcard" style="margin-top:12px">
       <h4>购入 / 租赁 <span>自有飞机按目录价扣现金；租赁先付押金</span></h4>
@@ -350,6 +505,15 @@ function renderFleetOp(){
       <label class="checkrow"><input id="ac_lease" type="checkbox"> 租赁（押金约 3 个月租金）</label>
       <div class="hintline" id="acinfo"></div>
       <div class="btnrow"><button class="primary" id="ac_buy">购买</button><span class="hintline" id="achint"></span></div>
+    </div>
+    <div class="opcard">
+      <h4>调机 <span>把飞机挪到别的机场；调机费按距离计</span></h4>
+      <div class="grid2">
+        <div class="field" style="margin:0"><label>飞机</label><select id="rb_ac">${acSelect}</select></div>
+        <div class="field" style="margin:0"><label>新基地</label><select id="rb_base">${airportOptions("")}</select></div>
+      </div>
+      <div class="btnrow"><button id="rb_go">调机</button>
+        <span class="hintline" id="rb_hint">航线要能连成一条闭合的航段链；同一连通块里的航线可由块内基地的飞机串飞，跨块就得调机。</span></div>
     </div>`;
 
   const updateBuy=()=>{
@@ -364,15 +528,32 @@ function renderFleetOp(){
       (lease?"：租赁需支付押金，后端校验现金":(STATE.player.cash<t.price?"：现金不足":""));
   };
   $("#ac_type").onchange=updateBuy;
+  const rbGo=$("#rb_go");
+  if(rbGo) rbGo.onclick=async()=>{
+    const res=await api("/api/command",{action:"rebase_aircraft",args:{
+      aircraft_id:Number($("#rb_ac").value), base:$("#rb_base").value}});
+    if(res.ok){
+      toast(res.changed?`已调机到 ${res.base}（¥${res.fee}M）`:"基地未变");
+      await refresh(); renderOp();
+    }
+  };
   $("#ac_lease").onchange=updateBuy;
   updateBuy();
 
   $("#opbody").querySelectorAll("[data-sell]").forEach(b=>{
     b.onclick=async()=>{
       const a=fleet.find(x=>String(x.id)===b.dataset.sell);
-      if(!a||!confirm(`确认出售 ${a.type}（编号 ${a.id}）？预计回笼 ¥${acResale(a).toFixed(0)}M`)) return;
+      if(!a) return;
+      const ask=a.lease
+        ? `确认退租 ${a.type}（编号 ${a.id}）？押金退回，但 ${a.base||"该基地"} 的 ${a.type} 运力会减少`
+        : `确认出售 ${a.type}（编号 ${a.id}）？预计回笼 ¥${acResale(a).toFixed(0)}M`;
+      if(!confirm(ask)) return;
       const res=await api("/api/command",{action:"sell_aircraft",args:{aircraft_id:a.id}});
-      if(res.ok){ toast(`已出售，回笼 ¥${Number(res.cash).toFixed(0)}M`); await refresh(); renderFleetOp(); }
+      if(res.ok){
+        toast(a.lease?`已退租，退还押金 ¥${Number(res.cash).toFixed(1)}M`
+                     :`已出售，回笼 ¥${Number(res.cash).toFixed(0)}M`);
+        await refresh(); renderFleetOp();
+      }
     };
   });
 
@@ -532,10 +713,12 @@ function renderHelpOp(){
       ${row("close 3","关闭 3 号航线；航线号见侧栏 / 航线管理")}
       ${row("price 3 1.15","把 3 号航线价格指数调到 1.15（0.50–1.50）")}
       ${row("flights 3 2","把 3 号航线加密到每日 2 班（1–14）")}
+      ${row("ac 3 B789","把 3 号航线换成 787-9；机队里必须已有该机型")}
       ${row("hub PEK","把北京设为新枢纽；需满足 2 航线 + 3 架基地机 + 吞吐门槛")}
       ${row("buy A320 PEK","购买一架 A320，基地北京")}
       ${row("lease B789 PEK","租赁一架 787-9，基地北京；押金从现金扣除")}
       ${row("sell 12","出售 12 号飞机；飞机号见「机队」")}
+      ${row("rebase 12 SHA","把 12 号飞机调机到上海；之后可在 SHA 开该机型的航线")}
       ${row("loan 500","借款 500 ¥M；额度由资产/EBITDA/权益决定")}
       ${row("rename 云翼航空","修改公司名称（2–20 个字符，不能重名）")}
     </tbody></table>
@@ -566,7 +749,7 @@ function renderDashboardOp(){
     lf:r.lf||0,
     margin:r.margin==null?null:r.margin,
     dist:r.distance_km||0,
-    order:(r.segments||[]).join("→")
+    order:(r.segments||[]).join("＝")
   })[key];
 
   const sorted=[...routes].sort((a,b)=>{
@@ -627,7 +810,7 @@ function renderDashboardOp(){
         </tr></thead>
         <tbody>${sorted.map(r=>`
           <tr class="rrow" onclick="openOp('route',${r.id})" title="打开航线管理">
-            <td><span class="routecell">${r.segments.join(" → ")}</span>
+            <td><span class="routecell">${r.segments.join(" ＝ ")}</span>
               <span class="sub">#${r.id} · 价格指数 ${Number(r.price_index).toFixed(2)}</span></td>
             <td>${r.ac_type}<span class="sub">${r.daily_flights} 班/日</span></td>
             <td>${Math.round(r.distance_km||0).toLocaleString()} km</td>

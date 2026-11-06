@@ -79,6 +79,15 @@ def settle_day(world, airlines, params, day=0):
                 + hub_fixed + interest + idle)
         ebitda = revenue - (fuel + landing + nav + maint + lease + staff + distribution + ground
                             + hub_fixed + interest + idle)
+        # 成本分项留档：供快照展示「为什么每条航线都赚、公司却亏」
+        al.last_costs = {
+            "fuel": fuel, "landing": landing, "nav": nav, "maint": maint,
+            "depreciation": dep, "lease": lease, "staff": staff,
+            "distribution": distribution, "ground": ground,
+            "hub_fixed": hub_fixed, "interest": interest, "idle": idle,
+            "fixed_total": staff + hub_fixed + dep + lease + interest + idle,
+            "total": cost,
+        }
         al.cash += revenue - cost
         al.ebitda_12m = getattr(al, "ebitda_12m", 0.0) * 0.9965 + ebitda * 0.0035
         # FR-1102 高质高效：公司级准点率按当日航线客流加权

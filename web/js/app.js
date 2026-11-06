@@ -187,6 +187,7 @@ function toast(msg,bad){
   t._h=setTimeout(()=>t.classList.remove("show"),1700);
 }
 const money=v=>(v>=0?"":"-")+Math.abs(v).toLocaleString("zh-CN",{maximumFractionDigits:1});
+let BOOT_PROMPTED=false;   // 启动选择面板只弹一次
 
 function render(){
   const s=STATE; if(!s) return;
@@ -208,21 +209,37 @@ function render(){
     $("#pname").textContent=p.alive?p.name:p.name+"（已破产）";
     $("#rank").textContent=p.rank?`排名 #${p.rank}`:"未排名";
     const k=p.kpi||{}, eb=k.ebitda||0;
+    const cap=p.capacity||{};
+    const usage=fleetUsageSummary(cap);
+    const usageCls=usage.over?'neg':(usage.worstPct>=85?'warn':'pos');
     $("#kpis").innerHTML=`
       <div class="kpi"><div class="l">现金 ¥M</div><div class="v">${money(p.cash)}</div></div>
+      <div class="kpi" title="总资产 = 现金 + 机队现值；净资产 = 总资产 − 负债，与对手榜的市值同口径排名">
+        <div class="l">总资产 ¥M</div><div class="v">${money((p.assets||{}).total ?? (p.cash + ((p.assets||{}).fleet||0)))}</div>
+        <div class="sub">净资产 ${money((p.assets||{}).equity ?? p.equity)}</div></div>
       <div class="kpi"><div class="l">负债 ¥M</div><div class="v">${money(p.debt)}</div></div>
       <div class="kpi"><div class="l">日客流</div><div class="v">${Math.round(k.pax||0).toLocaleString()}</div></div>
       <div class="kpi"><div class="l">日 EBITDA</div><div class="v ${eb>=0?'pos':'neg'}">${money(eb)}</div></div>
       <div class="kpi"><div class="l">口碑</div><div class="v">${(p.reputation||0).toFixed(1)}</div></div>
-      <div class="kpi"><div class="l">机队/航线</div><div class="v">${p.fleet.length}/${p.routes.length}</div></div>`;
+      <div class="kpi"><div class="l">机队/航线</div><div class="v">${p.fleet.length}/${p.routes.length}</div></div>
+      <div class="kpi" title="机队利用 = 每天被航线占用的飞机小时 ÷ 上限。每架飞机每天最多 16 h / 8 段，按机型和航段连通块分开算。">
+        <div class="l">机队利用</div>
+        <div class="v ${usageCls}">${usage.pct}%</div>
+        <div class="sub">${usage.text}</div></div>`;
     $("#routecount").textContent=p.routes.length;
-    $("#routes").innerHTML=p.routes.map(r=>`
-      <tr class="rrow" onclick="openOp('route',${r.id})" title="点击调整价格 / 班次">
-      <td>${r.segments.join("→")}</td><td>${r.daily_flights}</td>
-      <td>${r.price_index.toFixed(2)}</td>
-      <td><div class="bar"><i style="width:${Math.min(1,r.lf)*100}%"></i></div></td>
-      <td><span class="x" onclick="event.stopPropagation();closeRouteConfirm(${r.id})">✕</span></td></tr>`).join("")
-      ||'<tr><td style="color:#78899c">点「开航线」或在地图上选两个机场</td></tr>';
+    const rhead=`<tr class="rhead"><th>航线</th><th>班次</th><th>机型</th><th>票价</th><th>客座</th><th></th></tr>`;
+    $("#routes").innerHTML=rhead+(p.routes.map(r=>{
+      const fare=routeFareEco(r);
+      const lf=Math.round(Math.min(1,Number(r.lf)||0)*100);
+      return `<tr class="rrow" onclick="openOp('route',${r.id})"
+          title="${r.segments.join("＝")} · 价格指数 ${Number(r.price_index).toFixed(2)} · 客座率 ${lf}% · 点击调整价格/班次/机型">
+        <td class="seg">${r.segments.join("＝")}</td>
+        <td>${r.daily_flights}</td>
+        <td class="ac">${escHTML(r.ac_type)}</td>
+        <td>${fare!=null?"¥"+fare.toLocaleString("zh-CN"):"—"}</td>
+        <td><div class="bar" title="客座率 ${lf}%"><i style="width:${lf}%"></i></div></td>
+        <td><span class="x" onclick="event.stopPropagation();closeRouteConfirm(${r.id})">✕</span></td></tr>`;
+    }).join("")||'<tr><td colspan="6" style="color:#78899c">点「开航线」或在地图上选两个机场</td></tr>');
   }
   renderRivals(s);
 
@@ -234,17 +251,30 @@ function render(){
 // 侧栏「竞争对手」：只列对手（不含本公司），标题标注 TOP 20 / 共 N 家。
 function renderRivals(s){
   const list=(s&&s.rivals)||[];
+  const me=s&&s.player;
   const total=(s&&Number.isFinite(s.rivals_total))?s.rivals_total:list.length;
   const tag=$("#rivalcount");
   if(tag){
     tag.textContent=list.length<total?`TOP ${list.length}/${total}`:`${total} 家`;
-    tag.title=`按市值排名，不含本公司；显示前 ${list.length} 家`
+    tag.title=`按市值排名，高亮的是你自己；对手显示前 ${list.length} 家`
       +(list.length<total?`（共 ${total} 家对手）`:"（全部对手）");
   }
-  $("#rivals").innerHTML=list.slice(0,20).map(a=>`
-    <tr><td class="rk">${a.rank||""}</td><td>${escHTML(a.name)}</td>
-    <td>${escHTML(a.hub||"—")}</td><td>${a.routes}</td>
-    <td>${money(a.market_cap)}</td></tr>`).join("")
+  const rows=list.slice(0,20).map(a=>({
+    rank:Number(a.rank)||1e9,
+    html:`<tr><td class="rk">${a.rank||""}</td><td>${escHTML(a.name)}</td>
+      <td>${escHTML(a.hub||"—")}</td><td>${a.routes}</td>
+      <td>${money(a.market_cap)}</td></tr>`,
+  }));
+  if(me&&me.rank){
+    rows.push({
+      rank:Number(me.rank)||1e9,
+      html:`<tr class="me"><td class="rk">${me.rank}</td><td>${escHTML(me.name)}（你）</td>
+        <td>${escHTML((me.hubs||[])[0]||"—")}</td><td>${(me.routes||[]).length}</td>
+        <td>${money(me.market_cap)}</td></tr>`,
+    });
+  }
+  rows.sort((a,b)=>a.rank-b.rank);
+  $("#rivals").innerHTML=rows.map(r=>r.html).join("")
     ||'<tr><td style="color:#78899c">暂无对手</td></tr>';
 }
 // ---- renderRivals 结束（tools/panel_check.js 抽取到此标记） ----
@@ -258,16 +288,47 @@ async function cmd(text){
     close:()=>({action:"close_route",args:{route_id:Number(a[0])}}),
     price:()=>({action:"set_price",args:{route_id:Number(a[0]),price_index:Number(a[1])}}),
     flights:()=>({action:"set_flights",args:{route_id:Number(a[0]),daily_flights:Number(a[1])}}),
+    ac:()=>({action:"set_aircraft",args:{route_id:Number(a[0]),ac_type:(a[1]||"").toUpperCase()}}),
     hub:()=>({action:"add_hub",args:{airport:a[0]}}),
     buy:()=>({action:"buy_aircraft",args:{ac_type:a[0]||"A320",base:a[1]}}),
     lease:()=>({action:"buy_aircraft",args:{ac_type:a[0]||"A320",base:a[1],lease:true}}),
     sell:()=>({action:"sell_aircraft",args:{aircraft_id:Number(a[0])}}),
+    rebase:()=>({action:"rebase_aircraft",args:{aircraft_id:Number(a[0]),
+      base:(a[1]||"").toUpperCase()}}),
     loan:()=>({action:"take_loan",args:{amount:Number(a[0])}}),
     rename:()=>({action:"rename_airline",args:{name:a.join(" ")}}),
   };
   if(!map[op]){ toast("未知指令 "+op,true); return; }
   const res=await api("/api/command",map[op]());
   if(res.ok){ toast("已执行"); refresh(); }
+}
+
+/* 航线主 OD（首→末）的经济舱票价；没有 prices 时返回 null（旧后端兼容） */
+function routeFareEco(r){
+  const segs=(r&&r.segments)||[];
+  if(segs.length<2) return null;
+  const list=(r&&r.prices)||[];
+  const main=list.find(p=>p.from===segs[0]&&p.to===segs[segs.length-1])||list[0];
+  const v=main&&Number(main.eco);
+  return Number.isFinite(v)?v:null;
+}
+
+/* 机队利用汇总：按机型列利用率，并给出最紧张的一档（供 KPI 与测试使用） */
+function fleetUsageSummary(cap){
+  const pools=(cap&&cap.pools)||[];
+  let used=0, total=0, over=false, worstPct=0, worstType="";
+  const parts=[];
+  for(const b of pools){
+    used+=Number(b.hours_used)||0;
+    total+=Number(b.hours_cap)||0;
+    const pct=b.hours_cap?Math.round(100*(Number(b.hours_used)||0)/b.hours_cap):0;
+    if(b.over||pct>=100) over=true;
+    if(pct>worstPct){ worstPct=pct; worstType=b.type; }
+    if((Number(b.hours_used)||0)>0||(Number(b.count)||0)>0) parts.push(`${b.type} ${pct}%`);
+  }
+  const pct=total?Math.round(100*used/total):0;
+  return {pct, worstPct, worstType, over,
+          text: parts.slice(0,3).join(" · ") || "—"};
 }
 
 /* ============================================================
@@ -282,6 +343,10 @@ async function refresh(){
     drawLabels();
     syncRoutes();
     syncRivalRoutes();
+    if(STATE&&STATE.boot&&!BOOT_PROMPTED){
+      BOOT_PROMPTED=true;
+      openOp("boot");
+    }
   }catch(e){ $("#log").textContent="后端未连接"; }
 }
 

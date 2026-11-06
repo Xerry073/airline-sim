@@ -35,9 +35,11 @@ const STATE = { airports: Object.values(AP) };
 function makeHarness() {
   const opened = [];
   const toasts = [];
+  const openedPanels = [];
   let wizOpen = false;
   const fn = new Function(
     "AP", "STATE", "toast", "$", "renderMarkers", "drawLabels", "openWizard", "hideTip",
+    "applyRouteFocus", "SHOW_AI", "openOp",
     "let sel=[], stopover=null, expandedCity=null, hoverId=null;\n"
     + block
     + "\nreturn {pick, clearSelection, sel:()=>sel.slice(), stopover:()=>stopover};"
@@ -48,9 +50,11 @@ function makeHarness() {
     () => ({ classList: { contains: () => wizOpen, remove: () => { wizOpen = false; } } }),
     () => {}, () => {},
     segs => { opened.push(segs); },
-    () => {}
+    () => {}, () => {}, false,
+    (mode, arg) => { openedPanels.push({ mode, arg }); }
   );
-  return { api, opened, toasts, isWizOpen: () => wizOpen, openWiz: () => { wizOpen = true; } };
+  return { api, opened, toasts, openedPanels, isWizOpen: () => wizOpen,
+           openWiz: () => { wizOpen = true; } };
 }
 
 let passed = 0, failed = 0;
@@ -59,12 +63,14 @@ function check(ok, msg, detail) {
   else { failed += 1; console.log("FAIL  " + msg + (detail ? "  " + detail : "")); }
 }
 
-// 1) 没有起点时左键点机场：不开向导，提示先用右键
+// 1) 没有起点时左键点机场：打开机场详情，不建航线
 {
   const h = makeHarness();
   h.api.pick("SHA", "dest");
-  check(h.opened.length === 0 && h.api.sel().length === 0 && /右键/.test(h.toasts[0].msg),
-    "未选起点时左键不建航线，提示用右键选起点", JSON.stringify(h.toasts));
+  check(h.opened.length === 0 && h.api.sel().length === 0
+    && h.openedPanels.length === 1 && h.openedPanels[0].mode === "airport"
+    && h.openedPanels[0].arg === "SHA",
+    "未选起点时左键点机场打开「机场详情」而不是开线", JSON.stringify(h.openedPanels));
 }
 
 // 2) 右键设起点：只记起点，不开向导

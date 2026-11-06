@@ -388,6 +388,93 @@ def main():
               and p["biz"] > p["eco"] for p in route["prices"]),
           str(route.get("prices")))
 
+    # ---------- 换机型（航线管理） ----------
+    g6 = S.Game(n_ai=0, with_player=True, seed=12)
+    g6.apply("open_route", {"segments": ["PEK", "SHA"], "daily_flights": 1,
+                            "ac_type": "A320"})
+    g6.apply("buy_aircraft", {"ac_type": "A333", "base": "PEK", "lease": True})
+    rid6 = g6.player.routes[0].rid
+    r_ok = g6.apply("set_aircraft", {"route_id": rid6, "ac_type": "A333"})
+    check("UI-05", "航线可以在机队已有型号之间换机型",
+          r_ok.get("ok") and g6.player.routes[0].ac_type == "A333"
+          and g6.snapshot()["player"]["routes"][0]["ac_type"] == "A333", str(r_ok))
+    r_same = g6.apply("set_aircraft", {"route_id": rid6, "ac_type": "A333"})
+    check("UI-05", "换成同一机型是空操作",
+          r_same.get("ok") and not r_same.get("changed"), str(r_same))
+    r_missing = g6.apply("set_aircraft", {"route_id": rid6, "ac_type": "B789"})
+    check("UI-05", "机队没有的机型被拒绝",
+          not r_missing.get("ok") and "机队没有" in str(r_missing.get("reason")),
+          str(r_missing))
+    r_unknown = g6.apply("set_aircraft", {"route_id": rid6, "ac_type": "XXXX"})
+    check("UI-05", "不存在的机型被拒绝", not r_unknown.get("ok"), str(r_unknown))
+
+    # ---------- 成本分项与利用率（解释「航线都赚、公司却亏」） ----------
+    g7 = S.Game(n_ai=0, with_player=True, seed=13)
+    g7.apply("open_route", {"segments": ["PEK", "SHA"], "daily_flights": 1,
+                            "ac_type": "A320"})
+    g7.advance_day()
+    pl7 = g7.snapshot()["player"]
+    c7 = pl7.get("costs") or {}
+    need = {"fuel", "landing", "nav", "maint", "depreciation", "lease", "staff",
+            "distribution", "ground", "hub_fixed", "interest", "idle",
+            "fixed_total", "total"}
+    check("UI-06", "快照给出成本分项与固定开销合计",
+          need <= set(c7) and abs(
+              c7["fixed_total"] - (c7["staff"] + c7["hub_fixed"] + c7["depreciation"]
+                                   + c7["lease"] + c7["interest"] + c7["idle"])) <= 0.002,
+          str({k: c7.get(k) for k in ("staff", "hub_fixed", "depreciation", "lease", "fixed_total")}))
+    pa7 = pl7.get("assets") or {}
+    check("UI-09", "快照给出总资产与净资产口径",
+          abs(pa7.get("total", -1) - (pa7.get("cash", 0) + pa7.get("fleet", 0))) < 0.01
+          and abs(pa7.get("equity", -1) - (pa7.get("total", 0) - pa7.get("debt", 0))) < 0.01,
+          str(pa7))
+    cap7 = pl7.get("capacity") or {}
+    check("UI-06", "快照给出机队利用率（占机小时与航段）",
+          cap7.get("hours_cap", 0) > 0 and 0 < cap7.get("hours_used", 0) <= cap7["hours_cap"]
+          and cap7.get("segments_cap", 0) > 0, str(cap7))
+
+    # ---------- 运力按机型分池（E190 空闲不能被 A320 借用） ----------
+    g8 = S.Game(n_ai=0, with_player=True, seed=14)
+    for segs in (["PEK", "SHA"], ["PEK", "CAN"], ["PEK", "CTU"]):
+        g8.apply("open_route", {"segments": segs, "daily_flights": 1, "ac_type": "A320"})
+    r_full = g8.apply("open_route", {"segments": ["PEK", "XIY"],
+                                     "daily_flights": 1, "ac_type": "A320"})
+    check("UI-07", "A320 运力按机型封顶，超出时报该机型运力不足",
+          not r_full.get("ok") and "A320 运力不足" in str(r_full.get("reason")),
+          str(r_full))
+    g8.apply("buy_aircraft", {"ac_type": "E190", "base": "PEK", "lease": True})
+    r_e = g8.apply("open_route", {"segments": ["PEK", "DLC"],
+                                  "daily_flights": 1, "ac_type": "E190"})
+    check("UI-07", "空闲的 E190 可以单独开线（A320 满员也能开）",
+          r_e.get("ok"), str(r_e))
+    r_unknown = g8.apply("open_route", {"segments": ["PEK", "SHA"],
+                                        "daily_flights": 1, "ac_type": "B789"})
+    check("UI-07", "机队没有的机型不能开线",
+          not r_unknown.get("ok") and "机队没有 B789" in str(r_unknown.get("reason")),
+          str(r_unknown))
+    g8.apply("buy_aircraft", {"ac_type": "A333", "base": "PEK", "lease": True})
+    r_runway = g8.apply("open_route", {"segments": ["PEK", "LXA"],
+                                       "daily_flights": 1, "ac_type": "A333"})
+    check("UI-07", "跑道等级按「机型 ≤ 机场」判定：宽体不能落 S 级机场",
+          not r_runway.get("ok") and "跑道等级" in str(r_runway.get("reason")),
+          str(r_runway))
+
+    # 连通分量：与基地连通的航线可以由同一架飞机串飞（KMG 不必驻扎飞机）
+    g11 = S.Game(n_ai=0, with_player=True, seed=21)
+    g11.apply("buy_aircraft", {"ac_type": "A320", "base": "XIY", "lease": True})
+    r1 = g11.apply("open_route", {"segments": ["XIY", "KMG"],
+                                  "daily_flights": 1, "ac_type": "A320"})
+    r2 = g11.apply("open_route", {"segments": ["KMG", "DEL"],
+                                  "daily_flights": 1, "ac_type": "A320"})
+    check("UI-07", "KMG 不驻扎飞机也能开线：与基地连通即可串飞",
+          r1.get("ok") and r2.get("ok"), str(r1) + " / " + str(r2))
+    g12 = S.Game(n_ai=0, with_player=True, seed=22)
+    r_iso = g12.apply("open_route", {"segments": ["CAN", "KMG"],
+                                     "daily_flights": 1, "ac_type": "A320"})
+    check("UI-07", "与任何基地都不连通的航线组不能开线",
+          not r_iso.get("ok") and "这组的 A320" in str(r_iso.get("reason")),
+          str(r_iso))
+
     # ---------- AI 公开航线网络 ----------
     g3 = S.Game(n_ai=3, with_player=True, seed=11)
     for _ in range(10):
@@ -427,6 +514,28 @@ def main():
           snap5["player"]["rank"] == 1
           and [r["rank"] for r in rivals5] == list(range(2, 22)),
           str([r.get("rank") for r in rivals5][:3]))
+
+    # ---------- 卖机 / 退租的运力约束 ----------
+    g9 = S.Game(n_ai=0, with_player=True, seed=15)
+    g9.apply("open_route", {"segments": ["PEK", "SHA"], "daily_flights": 2,
+                            "ac_type": "A320"})
+    only_id = g9.player.fleet[0].id
+    r_sell = g9.apply("sell_aircraft", {"aircraft_id": only_id})
+    check("UI-08", "有航线在飞时不能卖掉唯一一架该基地的飞机",
+          not r_sell.get("ok") and "运力会被吃穿" in str(r_sell.get("reason")),
+          str(r_sell))
+
+    g10 = S.Game(n_ai=0, with_player=True, seed=16)
+    lease = g10.apply("buy_aircraft", {"ac_type": "E190", "base": "PEK", "lease": True})
+    lid = lease.get("aircraft_id")
+    cash_before = g10.player.cash
+    deposit = g10.player.lease_deposit("E190")
+    r_ret = g10.apply("sell_aircraft", {"aircraft_id": lid})
+    check("UI-08", "租赁机是退租而不是出售：只退押金，不产生二手收入",
+          r_ret.get("ok") and r_ret.get("kind") == "return"
+          and abs((g10.player.cash - cash_before) - deposit) < 1e-6
+          and not any(a.id == lid for a in g10.player.fleet),
+          f"{r_ret} / 押金 {deposit:.2f} / 现金变化 {g10.player.cash - cash_before:.2f}")
 
     # ---------- 存档 / 读档 ----------
     g4 = S.Game(n_ai=2, with_player=True, seed=21)

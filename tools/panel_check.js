@@ -88,6 +88,16 @@ function rivals(n, from = 2) {
     "无对手：标签 0 家 + 占位文案", `${tag.textContent} / ${html.slice(0, 40)}`);
 }
 
+// 3b) 玩家按名次插入对手榜并高亮
+{
+  const { html } = render({ rivals: rivals(5, 2), rivals_total: 5,
+    player: { name: "玩家航空", rank: 4, hubs: ["PEK"], routes: [1, 2, 3], market_cap: 9000 } });
+  const i2 = html.indexOf("AI-02"), iMe = html.indexOf("玩家航空"), i4 = html.indexOf("AI-04");
+  check(/<tr class="me">/.test(html) && /玩家航空（你）/.test(html)
+    && i2 >= 0 && iMe > i2 && i4 > iMe,
+    "玩家按名次插入对手榜并高亮", html.replace(/\s+/g, " ").slice(0, 200));
+}
+
 // 4) 旧后端没有 rivals_total 字段时按列表长度兜底
 {
   const { tag, rows } = render({ rivals: rivals(3) });
@@ -176,18 +186,31 @@ const APX = {
   CTU: { city: "成都" }, KMG: { city: "昆明" },
 };
 
-function renderMine(playerRoutes, opponentRoutes) {
+function renderMine(playerRoutes, opponentRoutes, fleet) {
   const nodes = new Map();
   const nodeFor = sel => {
     if (!nodes.has(sel)) nodes.set(sel, { textContent: "", innerHTML: "" });
     return nodes.get(sel);
   };
   const fn = new Function("$", "escHTML", "STATE", "OP", "AP",
-    "routeMarketSet", "routeIsContested",
+    "routeMarketSet", "routeIsContested", "aircraftOf", "haversineKm",
     routeBlock + "\n; return renderRouteOp;");
-  const STATE = { player: { routes: playerRoutes }, opponent_routes: opponentRoutes };
+  const STATE = {
+    player: {
+      routes: playerRoutes, fleet: fleet || [{ type: playerRoutes[0].ac_type }],
+      costs: { staff: 0.42, hub_fixed: 0.08, depreciation: 0.06, lease: 0.14,
+               interest: 0, idle: 0, fixed_total: 0.70, total: 1.26 },
+      capacity: {
+        hours_used: 22.3, hours_cap: 48, segments_used: 12, segments_cap: 24,
+        pools: [{ type: "A320", airports: ["PEK"], count: 2, hours_used: 26.2,
+                  hours_cap: 32, segments_used: 10, segments_cap: 16, over: false }],
+      },
+    },
+    opponent_routes: opponentRoutes,
+  };
   const render = fn(nodeFor, escHTML, STATE, { routeId: playerRoutes[0].id }, APX,
-    routeMarketSet, routeIsContested);
+    routeMarketSet, routeIsContested,
+    code => ({ name: code + " 型", seats: 165, range: 6300 }), () => 1000);
   render();
   return nodeFor("#opbody").innerHTML;
 }
@@ -240,6 +263,105 @@ const mine = {
   const html = renderMine([mine], []);
   check(/没有 AI 在飞同一个市场/.test(html) && /暂无重叠/.test(html),
     "无竞争时给出占位文案与「暂无重叠」");
+}
+
+// 12) 换机型：下拉只列机队已有型号，当前机型必在列表中
+{
+  const html = renderMine([mine], [], [{ type: "A320" }, { type: "B789" }]);
+  check(/id="acsel"/.test(html) && /id="acsave"/.test(html)
+    && /value="A320"/.test(html) && /value="B789"/.test(html)
+    && !/value="A333"/.test(html) && /更换机型/.test(html),
+    "换机型下拉只列机队已有型号，且带更换按钮",
+    html.replace(/\s+/g, " ").match(/<select id="acsel">[\s\S]*?<\/select>/)?.[0] || "");
+}
+
+// 13) 固定开销 vs 航线利润：解释「每条都赚、公司却亏」
+{
+  const html = renderMine([mine], []);
+  check(/公司固定开销/.test(html) && /¥0\.70M\/日/.test(html)
+    && /全部航线利润合计/.test(html) && /覆盖固定开销后/.test(html)
+    && /机队日占机/.test(html) && /22\.3\/48 h（46%）/.test(html),
+    "航线管理显示固定开销、航线利润合计与占机率",
+    html.replace(/\s+/g, " ").slice(0, 260));
+}
+
+// 13b) 机场详情面板：左键点机场能看到信息，而不是只弹提示
+{
+  const apStart = panelsSrc.indexOf("function renderAirportOp");
+  const apEnd = panelsSrc.indexOf("function renderPublicRouteOp", apStart);
+  if (apStart < 0 || apEnd < 0) { console.error("找不到 renderAirportOp"); process.exit(1); }
+  const apBlock = panelsSrc.slice(apStart, apEnd);
+  const nodes = new Map();
+  const nodeFor = sel => {
+    if (!nodes.has(sel)) nodes.set(sel, { textContent: "", innerHTML: "", onclick: null });
+    return nodes.get(sel);
+  };
+  const fn = new Function("$", "escHTML", "STATE", "AP", "OP",
+    "pick", "openOp", "closeOp", "renderOp",
+    apBlock + "\n; return renderAirportOp;");
+  const AP2 = { PEK: { city: "北京", region: "中国", scale: "XL", pax: 100 } };
+  const STATE2 = {
+    airports: [{ iata: "PEK", city: "北京", region: "中国", scale: "XL", pax: 100,
+                 slot_used: 760, slot_cap: 1600 }],
+    player: { routes: [{ id: 1, segments: ["PEK", "SHA"], daily_flights: 2, lf: 0.87 }] },
+    opponent_routes: [{ airline: "AI-01", segments: ["PEK", "CAN"] }],
+  };
+  fn(nodeFor, escHTML, STATE2, AP2, { airportCode: "PEK" },
+     () => {}, () => {}, () => {}, () => {})();
+  const html = nodeFor("#opbody").innerHTML;
+  check(/PEK · 北京/.test(html) && /760\/1600/.test(html)
+    && /我的航线 <b>1 条/.test(html) && /AI 航线 <b>1 条/.test(html)
+    && /id="ap_origin"/.test(html) && /id="ap_new"/.test(html),
+    "左键点机场打开详情：客流/时刻/我的与 AI 航线数 + 起点按钮",
+    html.replace(/\s+/g, " ").slice(0, 200));
+}
+
+// 14) 运力池按「机型 + 基地」展示；调机入口接在后端 rebase_aircraft 上
+{
+  const html = renderMine([mine], []);
+  check(/PEK 这组的 A320 运力 26\.2\/32 h/.test(html)
+    && /action:"rebase_aircraft"/.test(panelsSrc) && /id="rb_go"/.test(panelsSrc),
+    "航线面板显示该基地的机型运力池，机队面板提供调机入口");
+}
+
+// 15) 租赁机在机队面板里是「退租」而不是「出售」
+{
+  check(/a\.lease\?"退租":"出售"/.test(panelsSrc) && /退押金/.test(panelsSrc),
+    "机队面板对租赁机显示退租与押金，而不是出售价");
+}
+
+// 15b) 航线主 OD 票价：经停航线取首→末，不取第一段
+{
+  const appSrc = fs.readFileSync(path.join(root, "web", "js", "app.js"), "utf8");
+  const s = appSrc.indexOf("function routeFareEco");
+  const e = appSrc.indexOf("/* 机队利用汇总", s);
+  if (s < 0 || e < 0) { console.error("找不到 routeFareEco"); process.exit(1); }
+  const fn = new Function(appSrc.slice(s, e) + "\n; return routeFareEco;")();
+  const stop = { segments: ["PEK", "XIY", "KMG"],
+    prices: [{ from: "PEK", to: "XIY", eco: 700, biz: 1800 },
+             { from: "PEK", to: "KMG", eco: 1190, biz: 3094 },
+             { from: "XIY", to: "KMG", eco: 600, biz: 1500 }] };
+  check(fn(stop) === 1190, "经停航线取「首→末」主 OD 的经济舱票价",
+    String(fn(stop)));
+  check(fn({ segments: ["PEK", "SHA"] }) === null, "缺 prices 时返回 null（旧后端兼容）");
+}
+
+// 16) 机队利用汇总：总体百分比 + 各机型小字（新机型 0% 也要显示）
+{
+  const appSrc = fs.readFileSync(path.join(root, "web", "js", "app.js"), "utf8");
+  const start = appSrc.indexOf("function fleetUsageSummary");
+  const end = appSrc.indexOf("/* ====", start);
+  if (start < 0 || end < 0) { console.error("找不到 fleetUsageSummary"); process.exit(1); }
+  const fn = new Function(appSrc.slice(start, end) + "\n; return fleetUsageSummary;")();
+  const s = fn({ pools: [
+    { type: "A320", count: 2, hours_used: 32, hours_cap: 32, over: false },
+    { type: "B77W", count: 1, hours_used: 0, hours_cap: 16, over: false },
+  ] });
+  check(s.pct === 67 && s.over && s.worstType === "A320"
+    && s.text === "A320 100% · B77W 0%",
+    "机队利用汇总给出总体百分比与各机型利用率", JSON.stringify(s));
+  const empty = fn({ pools: [] });
+  check(empty.pct === 0 && empty.text === "—", "无机队时显示占位");
 }
 
 console.log("\n" + (failed ? "FAILED" : "OK") + "  " + passed + " passed, " + failed + " failed");

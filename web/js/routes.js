@@ -84,6 +84,25 @@ function applyPlayerStyle(node,r,aiMarkets){
   }
 }
 
+/* ============================================================
+   开线焦点：选中起点后，只强调经过它的航线，其余整体压暗
+   ============================================================ */
+function applyRouteFocus(){
+  const codes=[];
+  if(Array.isArray(sel)) codes.push(...sel);
+  if(typeof stopover!=="undefined"&&stopover) codes.push(stopover);
+  const on=codes.length>0;
+  const mark=nodes=>{
+    nodes.forEach(n=>{
+      const hit=on&&routeTouches(n.data&&n.data.segments,codes);
+      n.el.classList.toggle("focus",hit);
+      n.el.classList.toggle("dim",on&&!hit);
+    });
+  };
+  mark(ROUTE_NODES);
+  mark(RIVAL_NODES);
+}
+
 function syncRoutes(){
   const desired=new Map();
   const routes=(STATE&&STATE.player&&STATE.player.routes)||[];
@@ -122,6 +141,7 @@ function syncRoutes(){
     applyPlayerStyle(node,r,aiMarkets);
   }
   firstRouteSync=false;
+  applyRouteFocus();
 }
 
 /* 对手航线：低饱和灰；与我的市场重叠时变暗黄。线宽同样按客座率。 */
@@ -182,6 +202,7 @@ function syncRivalRoutes(){
     if(routeHover&&[...RIVAL_NODES.values()].includes(routeHover)){ routeHover=null; hideTip(); }
     layer.innerHTML="";
     RIVAL_NODES.clear();
+    applyRouteFocus();
     return;
   }
   const routes=(STATE&&STATE.opponent_routes)||[];
@@ -222,6 +243,7 @@ function syncRivalRoutes(){
       node.hits.forEach(p=>p.setAttribute("stroke-width",w+8));
     }
   }
+  applyRouteFocus();
 }
 
 /* ============================================================

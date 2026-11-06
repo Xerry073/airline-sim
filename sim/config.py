@@ -18,23 +18,26 @@ SAVE_FORMAT = "airline-sim-save"
 SAVE_VERSION = 1
 
 ECON = {
+    # 2026-11 参数轮：小规模航司原来无法盈利（3 机 8 线、满负荷仍 −0.37/日）。
+    # 固定开销下调约 45%、折旧/租赁下调约 30%、导航/起降/维护下调 20–25%，
+    # 使「按机队规模摊固定开销」不再一刀砍死小航司；燃油与分销保持标定值。
     "fuel_price_per_kg": 5.0,        # 人民币元/kg
-    "landing_base_M": 0.008,         # ¥M / 次，按 MTOW/70 缩放
-    "nav_rate_M_per_km": 1.0e-5,     # ¥M / km，按 MTOW/70 缩放
-    "staff_base_M_day": 0.15,
-    "staff_per_aircraft_M_day": 0.05,
-    "staff_per_segment_M_day": 0.010,
-    "hub_fixed_by_scale": {"XL": 0.08, "L": 0.06, "M": 0.04, "S": 0.02, "R": 0.01},
+    "landing_base_M": 0.0068,        # ¥M / 次，按 MTOW/70 缩放
+    "nav_rate_M_per_km": 0.8e-5,     # ¥M / km，按 MTOW/70 缩放
+    "staff_base_M_day": 0.08,
+    "staff_per_aircraft_M_day": 0.030,
+    "staff_per_segment_M_day": 0.006,
+    "hub_fixed_by_scale": {"XL": 0.05, "L": 0.04, "M": 0.025, "S": 0.012, "R": 0.006},
     "distribution_pct": 0.10,        # 销售与分销费用，按收入比例
     "ground_per_pax_M": 0.00012,     # 地面服务 / 值机 / 安检 / 餐食，¥M / 人次
-    "maint_load_factor": 1.40,       # 维护成本修正：真实航司维修负担高于按小时线性估算
-    "depreciation_years": 20,
-    "residual": 0.10,
-    "lease_rate_month": 0.0055,
+    "maint_load_factor": 1.25,       # 维护成本修正：真实航司维修负担高于按小时线性估算
+    "depreciation_years": 28,
+    "residual": 0.15,
+    "lease_rate_month": 0.0038,
     "max_debt_to_equity": 2.0,
     "loan_rate_base": 0.06,
     "loan_rate_max": 0.12,
-    "idle_cost_M_day": 0.02,         # 闲置停机与人员（R-702）
+    "idle_cost_M_day": 0.01,         # 闲置停机与人员（R-702）
 }
 
 FLIGHT = {

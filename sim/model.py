@@ -141,13 +141,14 @@ class World:
 class Aircraft:
     _next = 1
 
-    def __init__(self, ac_type, age=0.0, lease=False, base=None):
+    def __init__(self, ac_type, age=0.0, lease=False, base=None, deposit=0.0):
         self.id = Aircraft._next
         Aircraft._next += 1
         self.type = ac_type
         self.age = age
         self.lease = lease
         self.base = base          # 基地机场：决定是否享受 HUB 成本乘数（FR-502）
+        self.deposit = deposit    # 租赁押金：退租时原额退还（费率变动不影响老合同）
         self.hours_today = 0.0
         self.segments_today = 0
         self.airline = None
@@ -281,19 +282,32 @@ class Airline:
                 return None
             self.cash -= cost
         ac = Aircraft(code, age=age, lease=lease,
-                      base=base or (self.hubs[0] if self.hubs else None))
+                      base=base or (self.hubs[0] if self.hubs else None),
+                      deposit=deposit if lease else 0.0)
         ac.airline = self
         self.fleet.append(ac)
         return ac
 
+    def lease_deposit(self, ac_type):
+        """租赁押金（与买入时同一口径：3 个月租金）"""
+        return self.world.ac(ac_type)["price"] * ECON["lease_rate_month"] * 3
+
     def sell_aircraft(self, ac):
-        """按市价 85% 立即出售回笼现金（§7.2）"""
+        """自有飞机：按市价 85% 立即出售回笼现金（§7.2）"""
         t = self.world.ac(ac.type)
         mv = t["price"] * max(0.10, 1 - 0.065 * ac.age - 0.0015 * ac.age ** 2)
         self.cash += mv * 0.85
         if ac in self.fleet:
             self.fleet.remove(ac)
         return mv * 0.85
+
+    def return_lease(self, ac):
+        """租赁飞机：退租，只退押金，不产生二手出售收入（飞机不是自己的）"""
+        deposit = ac.deposit if getattr(ac, "deposit", 0) > 0 else self.lease_deposit(ac.type)
+        self.cash += deposit
+        if ac in self.fleet:
+            self.fleet.remove(ac)
+        return deposit
 
     def close_route(self, r):
         if r in self.routes:
@@ -390,6 +404,82 @@ class Airline:
     def has_capacity(self, r):
         return (self.total_hours() + self.route_hours(r) <= self.capacity_hours()
                 and self.total_segments() + self.route_segments_needed(r) <= self.capacity_segments())
+
+    # ---------- 按机型 + 连通分量分池的运力 ----------
+    # 一架飞机一天只能飞一条连续的航段链：A→B→C→A 是合法的转一圈，
+    # 但从 PEK 飞 SHA 再飞 KMG 就必须有 SHA→KMG 的航段把链子接上。
+    # 因此把航段看成无向图的边，连通分量就是一个「同一架飞机能串飞」的组；
+    # 每组的上限是 16 h × 组内机场驻扎的该机型飞机数。
+    # 这样 XIY-DEL、XIY-KMG、KMG-DEL 三条线可以被一架 XIY 的飞机串起来，
+    # 而一条孤立的 KMG-DEL 则必须有一架停在 KMG 的飞机。
+
+    def components(self, ac_type):
+        """按机型把航线按航段连通性分组：root -> {hours, segs, cap_h, cap_s, airports}"""
+        parent = {}
+
+        def find(x):
+            parent.setdefault(x, x)
+            root = x
+            while parent[root] != root:
+                root = parent[root]
+            while parent[x] != root:
+                parent[x], x = root, parent[x]
+            return root
+
+        def union(a, b):
+            ra, rb = find(a), find(b)
+            if ra != rb:
+                parent[rb] = ra
+
+        routes = [r for r in self.routes if r.ac_type == ac_type]
+        for r in routes:
+            for i in range(len(r.segments) - 1):
+                union(r.segments[i], r.segments[i + 1])
+        for a in self.fleet:
+            if a.type == ac_type and a.base:
+                find(a.base)
+
+        groups = {}
+        for r in routes:
+            root = find(r.segments[0])
+            g = groups.setdefault(root, {"hours": 0.0, "segs": 0,
+                                         "cap_h": 0.0, "cap_s": 0, "airports": set()})
+            g["hours"] += self.route_hours(r)
+            g["segs"] += self.route_segments_needed(r)
+            g["airports"].update(r.segments)
+        for a in self.fleet:
+            if a.type != ac_type or not a.base:
+                continue
+            root = find(a.base)
+            g = groups.setdefault(root, {"hours": 0.0, "segs": 0, "cap_h": 0.0,
+                                         "cap_s": 0, "airports": set()})
+            g["airports"].add(a.base)
+            g["cap_h"] += FLIGHT["max_hours_per_day"]
+            g["cap_s"] += FLIGHT["max_segments_per_day"]
+        return groups
+
+    def excess_by_component(self, ac_type=None):
+        """超出上限的 (小时, 航段) 合计；用于「允许补救、禁止恶化」的变更校验"""
+        types = [ac_type] if ac_type else sorted({r.ac_type for r in self.routes}
+                                                | {a.type for a in self.fleet})
+        ex_h = ex_s = 0.0
+        for t in types:
+            for g in self.components(t).values():
+                ex_h += max(0.0, g["hours"] - g["cap_h"])
+                ex_s += max(0.0, g["segs"] - g["cap_s"])
+        return ex_h, ex_s
+
+    def fits_route(self, r):
+        """把航线 r 加进来后，该机型的所有连通分量是否都不超载"""
+        if r in self.routes:
+            raise ValueError("fits_route 需要一条尚未加入 routes 的航线")
+        self.routes.append(r)
+        try:
+            ex_h, ex_s = self.excess_by_component(r.ac_type)
+        finally:
+            self.routes.remove(r)
+        return ex_h <= 1e-9 and ex_s <= 1e-9
+
 
     def can_cover(self, r):
         need_h = self.route_hours(r)
