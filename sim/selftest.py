@@ -366,6 +366,48 @@ def main():
     r_bad = g.apply("rename_airline", {"name": " "})
     check("UI-01", "空公司名称被拒绝", not r_bad.get("ok"), str(r_bad))
 
+    # ---------- AI 公司名池 ----------
+    check("FR-1002", "AI 名池提供 100 个不重复的公司名",
+          len(S.AI_NAME_POOL) == 100 and len(set(S.AI_NAME_POOL)) == 100,
+          f"{len(S.AI_NAME_POOL)} 个 / {len(set(S.AI_NAME_POOL))} 个唯一")
+    g_named = S.Game(n_ai=50, with_player=True, seed=42)
+    ai_names = [a.name for a in g_named.airlines if not a.is_player]
+    check("FR-1002", "50 家 AI 从池子里各取一个名字、互不重复",
+          len(ai_names) == 50 and len(set(ai_names)) == 50
+          and all(n in S.AI_NAME_POOL for n in ai_names)
+          and "玩家航空" not in ai_names,
+          f"{ai_names[:4]} …")
+    check("FR-1002", "同一 seed 名字可复现，换 seed 名字会变",
+          [a.name for a in S.Game(n_ai=50, seed=42).airlines]
+          == [a.name for a in S.Game(n_ai=50, seed=42).airlines]
+          and [a.name for a in S.Game(n_ai=50, seed=42).airlines]
+          != [a.name for a in S.Game(n_ai=50, seed=43).airlines])
+    check("FR-1002", "抽名字不消耗对局随机数流（同一 seed 的 AI 行为不变）",
+          S.Game(n_ai=0, seed=9).rng.getstate() == S.Game(n_ai=50, seed=9).rng.getstate())
+    check("FR-1002", "玩家自己占用的名字不会分给 AI",
+          all(a.name != "云翼航空" for a in S.Game(n_ai=50, seed=5,
+                                                 player_name="云翼航空",
+                                                 with_player=True).airlines
+              if not a.is_player))
+    check("FR-1002", "池子不够时用 AI-nn 兜底且仍然唯一",
+          (lambda ns: len(ns) == 105 and len(set(ns)) == 105)(
+              S.pick_ai_names(105, seed=1)))
+    # 旧存档（AI-01…）读档时改名，玩家名字与已有名字不动
+    raw_legacy = json.loads(json.dumps(g_named.to_save(), ensure_ascii=False))
+    for idx, ad in enumerate(a for a in raw_legacy["game"]["airlines"] if not a["is_player"]):
+        ad["name"] = f"AI-{idx + 1:02d}"
+    g_legacy = S.Game.from_save(raw_legacy)
+    renamed = [a.name for a in g_legacy.airlines if not a.is_player]
+    check("FR-1002", "旧存档的 AI-nn 读档后换成了公司名，且不重名、不碰玩家",
+          len(set(renamed)) == len(renamed)
+          and not any(S.LEGACY_AI_NAME.match(n) for n in renamed)
+          and g_legacy.player.name == g_named.player.name,
+          f"{renamed[:3]} …")
+    check("FR-1002", "改名只发生在读档那一次（再存再读名字不变）",
+          [a.name for a in S.Game.from_save(
+              json.loads(json.dumps(g_legacy.to_save(), ensure_ascii=False))).airlines]
+          == [a.name for a in g_legacy.airlines])
+
     # ---------- 航线数据看板 ----------
     g2 = S.Game(n_ai=0, with_player=True, seed=8)
     opened = g2.apply("open_route", {"segments": ["PEK", "SHA"],

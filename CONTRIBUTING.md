@@ -49,7 +49,7 @@ calibration/  系数与机场数据              docs/    需求、规则边界
 ### sim/ 只允许"向下依赖"
 
 ```
-config → util → model → products → market → settle → ai → goals → game → report
+config → names → util → model → products → market → settle → ai → goals → game → report
 ```
 
 - 左边的模块不能 import 右边的；`sim/simulate.py` 只是兼容门面，**不要往里加逻辑**

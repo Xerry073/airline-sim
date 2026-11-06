@@ -6,13 +6,18 @@
 
 import json
 import random
+import re
 from ai import ai_decide, usable_slots, validate_stopover
 from collections import defaultdict
 from config import CAL, DAYS_PER_YEAR, GOAL_DEADLINE_DAYS, GOAL_DEFS, GOAL_MONTHS, GOAL_RATINGS, HISTORY_DAYS, MONTHLY_KEEP, REGION_NAMES, SAVE_FORMAT, SAVE_VERSION, STOP
 from goals import blank_goal_state, month_quality_ok, region_market_share, weighted_load_factor
 from model import Aircraft, Airline, Route, World
+from names import pick_ai_names
 from settle import settle_day
 from util import runway_allows, slot_touches
+
+# 旧版 AI 名字形如 "AI-07"：读档时替换成名字池里的公司名
+LEGACY_AI_NAME = re.compile(r"^AI-\d{2}$")
 
 
 # ============================================================
@@ -111,9 +116,12 @@ class Game:
             world.hub_airports.add(player_hub)
             self.airlines.append(self.player)
 
+        # 名字用独立随机数流抽取：不消耗 self.rng，同一 seed 的 AI 行为与旧版一致
+        ai_names = pick_ai_names(n_ai, seed,
+                                 taken=(self.player.name if self.player else "",))
         for i in range(n_ai):
             hub = hub_pool[i % len(hub_pool)]
-            al = Airline(f"AI-{i+1:02d}", world, start_cash, hub)
+            al = Airline(ai_names[i], world, start_cash, hub)
             al.buy_aircraft("A320", base=hub)
             world.hub_airports.add(hub)
             self.airlines.append(al)
@@ -845,6 +853,15 @@ class Game:
                        if hasattr(r, "rid")), default=0)
         g._next_rid = max(g._next_rid, max_rid + 1)
         Aircraft._next = max(Aircraft._next, max_ac_id + 1)
+
+        # 老存档里的 AI 还叫 AI-01…AI-50：读档时补成名字池里的公司名，
+        # 玩家自己改过的名字、「云翼航空」这类已有名字都保持原样。
+        legacy = [al for al in g.airlines
+                  if not al.is_player and LEGACY_AI_NAME.match(al.name or "")]
+        if legacy:
+            used = [al.name for al in g.airlines if al not in legacy and al.name]
+            for al, name in zip(legacy, pick_ai_names(len(legacy), g.seed, taken=used)):
+                al.name = name
 
         # FR-403：读档后按航线重算时刻，兼容旧存档中未计入
         # daily_flights / 经停中间机场的占用。

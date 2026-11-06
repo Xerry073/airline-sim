@@ -18,7 +18,7 @@
 后端（server/：api.py 路由 → session.py 会话 → sim/ 内核）
    │
    ▼
-模拟内核（sim/ 10 个分层模块，simulate.py 只是兼容门面）
+模拟内核（sim/ 11 个分层模块，simulate.py 只是兼容门面）
    │
    ▼
 系数与数据（calibration/params.json、airports.csv；sim/aircraft.csv）
@@ -45,6 +45,7 @@
 | `server/supervisor.py` | 监督进程：`app.py` 以退出码 42 退出时用原参数重启 |
 | `sim/simulate.py` | **兼容门面**：re-export 下面所有模块，保持旧 import 与 CLI 用法 |
 | `sim/config.py` | 路径、ECON/COST 系数、目标常量、区域名 |
+| `sim/names.py` | AI 公司名池（100 个）、按种子无放回抽取（独立随机数流） |
 | `sim/util.py` | CSV 读取、大圆距离、clamp、sigmoid、`slot_touches` |
 | `sim/model.py` | `World` / `Aircraft` / `Route` / `Airline` |
 | `sim/products.py` | 航线 → 行程产品（直飞/经停/中转、候选上限、去重） |
