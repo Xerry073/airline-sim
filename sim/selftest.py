@@ -379,6 +379,14 @@ def main():
     check("UI-02", "航线利润率与收入/成本一致",
           route and abs(route["margin"] - route["profit_M"] / route["revenue_M"]) < 0.002,
           str(route.get("margin")))
+    check("UI-02", "玩家航线带 OD 票价，口径与对手一致（R-632）",
+          route.get("prices") and any(
+              abs(p["eco"] - round(g2.world.p_ref(
+                      g2.world.dist(g2.world.airports[p["from"]]["city"],
+                                    g2.world.airports[p["to"]]["city"]), "eco")
+                  * route["price_index"])) <= max(2, p["eco"] * 0.001)
+              and p["biz"] > p["eco"] for p in route["prices"]),
+          str(route.get("prices")))
 
     # ---------- AI 公开航线网络 ----------
     g3 = S.Game(n_ai=3, with_player=True, seed=11)

@@ -4,6 +4,39 @@
 
 ---
 
+## 2026-11-06 · 信息轮：玩家航线也输出 OD 票价，与对手并排比价
+
+目的：上一轮只显示了对手的价格指数，玩家还得自己换算才比得出「我贵多少」。现在两侧
+用同一口径输出 OD 票价，面板直接并排。
+
+### 变更
+
+- **快照**（`sim/game.py`）
+  - `player.routes[]` 增加 `prices[]{from, to, eco, biz}`，与 `opponent_routes[].prices` 同一实现
+    （`Route.public_fares()`，`p_ref(两端直线距离, 舱位) × price_index`，R-632）
+  - 没有新增计算路径，也没有引入成本/收入字段
+- **航线管理 · 竞争者卡片**（`web/js/panels.js`）
+  - 每个对手航线下面并排列出**重叠 OD** 的票价：`PEK → SHA：我 ¥1,190 · 对手 ¥880 低 26%`
+  - OD 匹配按**城市**、方向不敏感：`SHA` 与 `PVG` 视为同一个市场
+  - 价差 |差| ≥ 1% 才标色（对手更便宜 = 红，更贵 = 绿）
+  - 对手或自己没有 `prices` 时（旧后端 / 无重叠 OD）自动退回价格指数比较，不出现空白
+- **测试**
+  - `sim/selftest.py` 52 条：新增「玩家航线带 OD 票价，口径与对手一致」
+  - `tools/panel_check.js` 13 条：新增并排票价、SHA/PVG 同城匹配、缺 `prices` 时退回指数比较
+
+### 测试
+
+```text
+python sim/selftest.py        -> 52 / 52
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 28 / 28
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     -> 13 / 13
+node tools/route_gui_check.js -> 10 / 10
+```
+
+---
+
 ## 2026-11-06 · 信息轮：我的航线面板显示竞争者公开数据
 
 目的：调价/改班次时，玩家要能在同一个地方看到「对手在这条市场上开几班、卖多贵、坐得多满」，

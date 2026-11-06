@@ -54,7 +54,7 @@
 | `sim/goals.py` | 四目标判定、区域份额、月报质量、A–E 评级 |
 | `sim/game.py` | `Game`：逐日推进、玩家指令、快照、存档序列化 |
 | `sim/report.py` | `run` / `summarize` / `write_report` / CLI |
-| `sim/selftest.py` | 51 条验收自测 |
+| `sim/selftest.py` | 52 条验收自测 |
 | `web/index.html` | 页面结构 + 脚本加载顺序 |
 | `web/css/app.css` | 全部样式 |
 | `web/js/*.js` | 按加载顺序：map → routes → interaction → panels → saves → goals → app |
@@ -186,7 +186,8 @@ airports[]      {iata, city, lat, lon, scale, region, pax, slot_cap, slot_used}
 player          {name, alive, cash, debt, equity, reputation, market_cap, rank,
                  hubs[], fleet[], routes[], kpi{pax,revenue,cost,ebitda}}
 player.routes[] {id, segments, daily_flights, ac_type, price_index, lf, rep, pax,
-                 distance_km, revenue_M, cost_M, profit_M, margin}
+                 distance_km, revenue_M, cost_M, profit_M, margin,
+                 prices[]{from, to, eco, biz}}
 rivals[]        对手榜：市值前 20、**不含本公司**
                  {name, hub, rank, routes, fleet, pax, ebitda, lf, rep, market_cap}
 rivals_total    存活对手总家数（50 AI 时约 49）
@@ -208,16 +209,16 @@ log[]           最近 40 条事件
 ## 6. 测试
 
 ```bash
-python sim/selftest.py          # 51 条内核验收（FR 编号对齐需求文档）
+python sim/selftest.py          # 52 条内核验收（FR 编号对齐需求文档）
 node tools/asset_check.js       #  5 条：前端资源引用、加载顺序、语法、重名、顶层语句
 node tools/map_check.js         # 28 条：地图几何、分级、标签避让、大圆、日界线
 node tools/goal_check.js        #  8 条：目标/模式面板与 /api/new_game 开局
-node tools/panel_check.js       # 10 条：对手榜口径、AI 票价、我的航线竞争对照
+node tools/panel_check.js       # 13 条：对手榜口径、AI 票价、我的航线竞争对照
 node tools/route_gui_check.js   # 10 条：开线手势（右键起点 / 左键终点 / Alt+左键经停）
 python -m compileall -q server sim calibration
 ```
 
-当前记录：`51/51`、`5/5`、`28/28`、`8/8`、`10/10`、`10/10`，`compileall` 退出码 0。
+当前记录：`52/52`、`5/5`、`28/28`、`8/8`、`13/13`、`10/10`，`compileall` 退出码 0。
 
 ### 前端测试怎么工作
 

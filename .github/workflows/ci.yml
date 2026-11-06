@@ -23,7 +23,7 @@ jobs:
       - name: Python 语法检查
         run: python -m compileall -q server sim calibration
 
-      - name: 内核自测（51 条）
+      - name: 内核自测（52 条）
         run: python sim/selftest.py
 
       - name: 前端资源引用检查
@@ -35,7 +35,7 @@ jobs:
       - name: 目标模式校验（8 条）
         run: node tools/goal_check.js
 
-      - name: 面板与 AI 票价校验（10 条）
+      - name: 面板与 AI 票价校验（13 条）
         run: node tools/panel_check.js
 
       - name: 开线手势校验（10 条）

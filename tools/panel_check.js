@@ -196,9 +196,10 @@ const mine = {
   id: 1, segments: ["PEK", "SHA"], ac_type: "A320", daily_flights: 2,
   price_index: 1.2, lf: 0.9, pax: 300, distance_km: 1091,
   revenue_M: 1.2, cost_M: 0.9, profit_M: 0.3, margin: 0.25,
+  prices: [{ from: "PEK", to: "SHA", eco: 1190, biz: 3094 }],
 };
 
-// 8) 竞争航线列出对手的班次 / 载客率 / 价格指数，并标出价差方向
+// 8) 竞争航线列出对手的班次 / 载客率 / 价格指数
 {
   const html = renderMine([mine], [
     { airline: "AI-07", segments: ["PEK", "SHA"], daily_flights: 4, lf: 0.88, price_index: 0.92 },
@@ -211,7 +212,30 @@ const mine = {
   check(!/AI-01/.test(html), "不相关市场的对手不出现在竞争列表");
 }
 
-// 9) 没有竞争时给出占位，而不是空白
+// 9) 有 OD 票价时并排比价（按城市匹配，SHA 与 PVG 视为同一市场）
+{
+  const html = renderMine([mine], [
+    { airline: "AI-07", segments: ["PEK", "SHA"], daily_flights: 4, lf: 0.88,
+      price_index: 0.92, prices: [{ from: "PEK", to: "SHA", eco: 880, biz: 2288 }] },
+    { airline: "AI-12", segments: ["PEK", "PVG"], daily_flights: 1, lf: 0.7,
+      price_index: 1.0, prices: [{ from: "PEK", to: "PVG", eco: 900, biz: 2340 }] },
+  ]);
+  check(/我 ¥1,190 · 对手 ¥880/.test(html) && /低 26%/.test(html),
+    "并排显示我的与对手的 OD 票价", html.replace(/\s+/g, " ").slice(0, 260));
+  check(/我 ¥1,190 · 对手 ¥900/.test(html) && /低 24%/.test(html),
+    "SHA/PVG 同城机场按城市匹配同一 OD");
+}
+
+// 10) 对手没有 OD 票价（旧后端）时退回价格指数比较
+{
+  const html = renderMine([mine], [
+    { airline: "AI-07", segments: ["PEK", "SHA"], daily_flights: 4, lf: 0.88, price_index: 0.92 },
+  ]);
+  check(/价格指数比你低 23%/.test(html) && !/我 ¥/.test(html),
+    "缺少 OD 票价时退回价格指数比较");
+}
+
+// 11) 没有竞争时给出占位，而不是空白
 {
   const html = renderMine([mine], []);
   check(/没有 AI 在飞同一个市场/.test(html) && /暂无重叠/.test(html),

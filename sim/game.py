@@ -775,6 +775,8 @@ class Game:
                     {"id": r.rid, "segments": list(r.segments),
                      "daily_flights": r.daily_flights, "ac_type": r.ac_type,
                      "price_index": r.price_index, "lf": r.lf_ewma,
+                     # 与对手侧同一口径的 OD 票价，供「竞争者」卡片并排比价
+                     "prices": r.public_fares(),
                      "rep": r.rep, "pax": getattr(r, "last_pax", 0.0),
                      "distance_km": round(getattr(r, "last_distance_km", r.total_km()), 0),
                      "revenue_M": round(getattr(r, "last_revenue", 0.0), 4),

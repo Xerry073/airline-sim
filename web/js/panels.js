@@ -175,19 +175,41 @@ function renderRouteOp(){
     .sort((a,b)=>(b.daily_flights||0)-(a.daily_flights||0)||(b.lf||0)-(a.lf||0));
   const shown=rivals.slice(0,10);
   const myIdx=Number(r.price_index)||1;
+  /* OD 匹配按城市，方向不敏感：SHA 与 PVG 视为同一个市场 */
+  const mkey=(a,b)=>{
+    const ca=(AP[a]||{}).city||a, cb=(AP[b]||{}).city||b;
+    return [ca,cb].sort().join("|");
+  };
+  const myFares=new Map();
+  (r.prices||[]).forEach(p=>myFares.set(mkey(p.from,p.to),p));
+  let anyFare=false;
   const rivalRows=shown.map(o=>{
     const lf=Number.isFinite(Number(o.lf))?(Number(o.lf)*100).toFixed(0)+"%":"—";
     const idx=Number(o.price_index);
+    const fareRows=(o.prices||[]).map(p=>{
+      const mine=myFares.get(mkey(p.from,p.to));
+      if(!mine) return "";
+      const myEco=Number(mine.eco)||0, rEco=Number(p.eco)||0;
+      if(!myEco||!rEco) return "";
+      anyFare=true;
+      const gap=rEco/myEco-1;
+      const tag=Math.abs(gap)>=0.01
+        ? `<b class="${gap<0?"warn":"pos"}">${gap<0?"低":"高"} ${Math.abs(gap*100).toFixed(0)}%</b>`
+        : "";
+      return `<div class="hintline" style="margin:-2px 0 6px 12px">
+        ${escHTML(p.from)} → ${escHTML(p.to)}：我 ¥${myEco.toLocaleString("zh-CN")} · 对手 ¥${rEco.toLocaleString("zh-CN")} ${tag}</div>`;
+    }).join("");
+    /* 没有 OD 票价时（旧后端 / 无重叠 OD）退回价格指数比较 */
     let gapTag="";
-    if(Number.isFinite(idx)&&idx>0){
+    if(!fareRows&&Number.isFinite(idx)&&idx>0){
       const gap=(idx/myIdx-1)*100;
       if(Math.abs(gap)>=1)
-        gapTag=`<div class="hintline" style="margin:-2px 0 6px">价格指数 ${idx<myIdx?"比你低":"比你高"} ${Math.abs(gap).toFixed(0)}%（你的 ${myIdx.toFixed(2)}）</div>`;
+        gapTag=`<div class="hintline" style="margin:-2px 0 6px">价格指数${idx<myIdx?"比你低":"比你高"} ${Math.abs(gap).toFixed(0)}%（你的 ${myIdx.toFixed(2)}）</div>`;
     }
     return `<div class="req">
         <span>${escHTML(o.airline||"AI")} · ${escHTML((o.segments||[]).join(" → "))}</span>
         <b>${o.daily_flights||"—"} 班 · LF ${lf} · 指数 ${Number.isFinite(idx)?idx.toFixed(2):"—"}</b>
-      </div>${gapTag}`;
+      </div>${fareRows}${gapTag}`;
   }).join("");
   $("#opbody").innerHTML=`
     <div class="field"><label>选择航线</label><select id="rsel">${opts}</select></div>
@@ -212,7 +234,8 @@ function renderRouteOp(){
       <h4>竞争者 <span>${contested?`${rivals.length} 条共享市场`:"暂无"}</span></h4>
       ${rivalRows||'<div class="empty">这条航线目前没有 AI 在飞同一个市场。</div>'}
       ${rivals.length>shown.length?`<div class="hintline">另有 ${rivals.length-shown.length} 条未显示（按班次排序取前 10）。</div>`:""}
-      <div class="hintline">对手数据为公开口径：班次 / 载客率 / 价格指数；成本与财务不可见。</div>
+      ${anyFare?'<div class="hintline">票价并排为经济舱（参考价 × 价格指数），百分比是对手相对你的高低。</div>':""}
+      <div class="hintline">对手数据为公开口径：班次 / 载客率 / 票价；成本与财务不可见。</div>
     </div>
     <div class="opcard">
       <h4>调价 <span>价格指数 0.50–1.50，1.00 = 参考票价</span></h4>
