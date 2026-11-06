@@ -18,7 +18,7 @@ function tipHTML(m){
     <div class="hint">${m.stop?"经停点 · Alt+左键取消"
       :(m.selIndex===0?"起点 · 左键点终点 · Alt+左键加经停"
       :(m.selIndex===1?"终点 · 右键可重选起点"
-      :"右键=起点 · 左键=终点 · Alt+左键=经停"))}</div>`;
+      :"左键=查看详情 · 右键=设为起点 · Alt+左键=经停"))}</div>`;
 }
 
 function showAirportTip(m,e){
@@ -130,7 +130,7 @@ function pickStopover(iata){
 }
 
 function pickDestination(iata){
-  if(!sel.length){ toast("右键点击机场选择航线起点",true); return; }
+  if(!sel.length){ openOp("airport",iata); return; }
   const origin=sel[0], a=AP[iata];
   if(iata===origin){ toast("起点与终点不能相同",true); return; }
   if(AP[origin]&&AP[origin].city===a.city){ toast("同城机场之间不构成航线",true); return; }

@@ -31,7 +31,7 @@ python sim/selftest.py                            # 66 条内核验收
 node tools/asset_check.js                         # 前端资源引用与语法
 node tools/map_check.js                           # 31 条地图几何
 node tools/goal_check.js                          #  8 条目标模式
-node tools/panel_check.js                         # 17 条对手榜、AI 票价、竞争对照、换机型、固定开销、调机
+node tools/panel_check.js                         # 18 条对手榜、AI 票价、竞争对照、换机型、固定开销、调机
 node tools/route_gui_check.js                     # 10 条开线手势
 ```
 

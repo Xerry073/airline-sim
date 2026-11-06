@@ -1,6 +1,6 @@
 /* 运营面板：开线 / 航线 / 机队 / 枢纽 / 贷款 / 改名 / 教程 / 数据看板 */
 const HUB_FEE={XL:300,L:200,M:100,S:60,R:50};
-let OP={mode:null,routeId:null,hubCode:null,acCode:null,publicRoute:null,seq:0};
+let OP={mode:null,routeId:null,hubCode:null,acCode:null,publicRoute:null,airportCode:null,newFrom:null,seq:0};
 
 function aircraftList(){ return (META&&META.aircraft)||[]; }
 function aircraftOf(code){ return aircraftList().find(t=>t.code===code); }
@@ -27,7 +27,9 @@ const escHTML=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&
 function openOp(mode,arg){
   if(!STATE&&mode!=="help"){ toast("状态尚未加载",true); return; }
   OP={mode,routeId:null,hubCode:null,acCode:null,
-      publicRoute:mode==="public"?arg:null,seq:OP.seq+1};
+      publicRoute:mode==="public"?arg:null,
+      airportCode:mode==="airport"?(arg||"PEK"):null,
+      newFrom:null,seq:OP.seq+1};
   if(mode==="route"){
     const routes=(STATE.player&&STATE.player.routes)||[];
     OP.routeId=arg!=null?Number(arg):(routes[0]?routes[0].id:null);
@@ -56,7 +58,7 @@ function renderOp(){
   if(!OP.mode) return;
   const titles={new:"开航线",route:"航线管理",fleet:"机队管理",hub:"枢纽设置",
     loan:"贷款",company:"公司名称",help:"教程 / 高级指令",dashboard:"航线数据看板",
-    public:"航线详情",saves:"存档 / 读档",goals:"模式 / 目标"};
+    public:"航线详情",airport:"机场详情",saves:"存档 / 读档",goals:"模式 / 目标"};
   $("#optitle").textContent=titles[OP.mode]||"运营操作";
   if(OP.mode==="new") renderNewRouteOp();
   else if(OP.mode==="route") renderRouteOp();
@@ -67,6 +69,7 @@ function renderOp(){
   else if(OP.mode==="help") renderHelpOp();
   else if(OP.mode==="dashboard") renderDashboardOp();
   else if(OP.mode==="public") renderPublicRouteOp();
+  else if(OP.mode==="airport") renderAirportOp();
   else if(OP.mode==="saves") renderSavesOp();
   else if(OP.mode==="goals") renderGoalsOp();
 }
@@ -74,7 +77,7 @@ function renderOp(){
 /* ---------- 开航线 ---------- */
 function renderNewRouteOp(){
   const hubs=(STATE.player&&STATE.player.hubs)||[];
-  const from=hubs[0]||"PEK";
+  const from=OP.newFrom||hubs[0]||"PEK";
   const to=(STATE.airports.find(a=>a.city!==(AP[from]||{}).city)||{}).iata||"SHA";
   const defaultAc=(aircraftList().find(t=>t.code==="A320")||aircraftList()[0]||{}).code||"";
   $("#opbody").innerHTML=`
@@ -346,6 +349,47 @@ async function closeRouteConfirm(id){
   if(!confirm(`确认关闭 #${r.id} ${r.segments.join("→")}？`)) return;
   const res=await api("/api/command",{action:"close_route",args:{route_id:r.id}});
   if(res.ok){ toast("航线已关闭"); await refresh(); }
+}
+
+/* ---------- 机场详情（左键点机场） ---------- */
+function renderAirportOp(){
+  const code=OP.airportCode||"PEK";
+  const a=AP[code]||{};
+  const st=(STATE.airports||[]).find(x=>x.iata===code)||{};
+  const myRoutes=((STATE.player&&STATE.player.routes)||[])
+    .filter(r=>(r.segments||[]).includes(code));
+  const aiRoutes=((STATE.opponent_routes)||[])
+    .filter(r=>(r.segments||[]).includes(code));
+  const used=st.slot_used||0, cap=st.slot_cap||0;
+  const pct=cap?Math.round(100*used/cap):0;
+  $("#opbody").innerHTML=`
+    <div class="marketbox">
+      <div class="sectionline"><span>${escHTML(code)} · ${escHTML(a.city||st.city||"")}</span>
+        <span>${escHTML(a.region||st.region||"")} · ${escHTML(st.scale||a.scale||"—")} 级</span></div>
+      <div class="mgrid">
+        <span>年客流 <b>${Math.round(a.pax||st.pax||0)} 百万人次</b></span>
+        <span>时刻占用 <b class="${pct>=90?"warn":""}">${used}/${cap}（${pct}%）</b></span>
+        <span>我的航线 <b>${myRoutes.length} 条</b></span>
+        <span>AI 航线 <b>${aiRoutes.length} 条</b></span>
+      </div>
+    </div>
+    <div class="sectionline"><span>经过这个机场的我的航线</span><span>${myRoutes.length} 条</span></div>
+    ${myRoutes.length
+      ? myRoutes.map(r=>`<div class="req"><span>#${r.id} ${escHTML((r.segments||[]).join(" → "))}</span>
+          <b>${r.daily_flights} 班 · LF ${Math.round((Number(r.lf)||0)*100)}%</b></div>`).join("")
+      : '<div class="empty">还没有经过这个机场的航线。</div>'}
+    <div class="btnrow" style="margin-top:10px">
+      <button class="primary" id="ap_origin">设为此航线起点</button>
+      <button id="ap_new">从这里开航线</button>
+      <button id="ap_close">关闭</button>
+    </div>
+    <div class="hintline">左键=查看机场详情 · 右键=设为航线起点 · Alt+左键=加经停点</div>`;
+  const originBtn=$("#ap_origin");
+  if(originBtn) originBtn.onclick=()=>{ closeOp(); pick(code,"origin"); };
+  const newBtn=$("#ap_new");
+  if(newBtn) newBtn.onclick=()=>{ closeOp(); openOp("new"); OP.newFrom=code; renderOp(); };
+  const closeBtn=$("#ap_close");
+  if(closeBtn) closeBtn.onclick=closeOp;
 }
 
 function renderPublicRouteOp(){

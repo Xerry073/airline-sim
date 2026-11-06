@@ -275,6 +275,37 @@ const mine = {
     html.replace(/\s+/g, " ").slice(0, 260));
 }
 
+// 13b) 机场详情面板：左键点机场能看到信息，而不是只弹提示
+{
+  const apStart = panelsSrc.indexOf("function renderAirportOp");
+  const apEnd = panelsSrc.indexOf("function renderPublicRouteOp", apStart);
+  if (apStart < 0 || apEnd < 0) { console.error("找不到 renderAirportOp"); process.exit(1); }
+  const apBlock = panelsSrc.slice(apStart, apEnd);
+  const nodes = new Map();
+  const nodeFor = sel => {
+    if (!nodes.has(sel)) nodes.set(sel, { textContent: "", innerHTML: "", onclick: null });
+    return nodes.get(sel);
+  };
+  const fn = new Function("$", "escHTML", "STATE", "AP", "OP",
+    "pick", "openOp", "closeOp", "renderOp",
+    apBlock + "\n; return renderAirportOp;");
+  const AP2 = { PEK: { city: "北京", region: "中国", scale: "XL", pax: 100 } };
+  const STATE2 = {
+    airports: [{ iata: "PEK", city: "北京", region: "中国", scale: "XL", pax: 100,
+                 slot_used: 760, slot_cap: 1600 }],
+    player: { routes: [{ id: 1, segments: ["PEK", "SHA"], daily_flights: 2, lf: 0.87 }] },
+    opponent_routes: [{ airline: "AI-01", segments: ["PEK", "CAN"] }],
+  };
+  fn(nodeFor, escHTML, STATE2, AP2, { airportCode: "PEK" },
+     () => {}, () => {}, () => {}, () => {})();
+  const html = nodeFor("#opbody").innerHTML;
+  check(/PEK · 北京/.test(html) && /760\/1600/.test(html)
+    && /我的航线 <b>1 条/.test(html) && /AI 航线 <b>1 条/.test(html)
+    && /id="ap_origin"/.test(html) && /id="ap_new"/.test(html),
+    "左键点机场打开详情：客流/时刻/我的与 AI 航线数 + 起点按钮",
+    html.replace(/\s+/g, " ").slice(0, 200));
+}
+
 // 14) 运力池按「机型 + 基地」展示；调机入口接在后端 rebase_aircraft 上
 {
   const html = renderMine([mine], []);

@@ -4,6 +4,36 @@
 
 ---
 
+## 2026-11-07 · 交互轮：左键点机场打开「机场详情」
+
+反馈：改成右键选起点后，左键点机场只会弹一句「右键选择起点」，想看机场信息反而没入口。
+
+### 变更
+
+- **左键点机场 = 查看详情**（`web/js/interaction.js`、`web/js/panels.js`）
+  - 未选起点时：打开「机场详情」面板（不再只弹 toast）
+  - 已选起点时：仍然是选终点并弹开线向导（行为不变）
+  - 面板内容：城市/区域/规模、年客流、时刻占用（已用/上限/百分比，≥90% 标黄）、
+    我的航线数、AI 航线数，以及经过该机场的我的航线清单（编号/航段/班次/载客率）
+  - 面板底部两个动作：「设为此航线起点」（等价右键）、「从这里开航线」（开线面板预填起点）
+- **悬停提示同步**：未选起点时显示「左键=查看详情 · 右键=设为起点 · Alt+左键=经停」
+
+### 测试
+
+- `tools/route_gui_check.js` 改为断言「未选起点左键 → 调用 openOp("airport", iata)」
+- `tools/panel_check.js` 17 → **18**：抽 `renderAirportOp()` 验证客流/时刻/航线数与两个按钮
+
+```text
+python sim/selftest.py        -> 66 / 66
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 31 / 31
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     -> 18 / 18
+node tools/route_gui_check.js -> 10 / 10
+```
+
+---
+
 ## 2026-11-07 · 修正轮：运力池按「航段连通块」而不是「出发机场」
 
 反馈：一架停在 XIY 的飞机可以飞 `XIY–DEL`、`XIY–KMG`、`KMG–DEL` 三条线（后两条在 KMG 接得上），
