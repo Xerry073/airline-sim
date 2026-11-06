@@ -8,7 +8,7 @@ import json
 import random
 from ai import ai_decide, usable_slots, validate_stopover
 from collections import defaultdict
-from config import CAL, DAYS_PER_YEAR, GOAL_DEADLINE_DAYS, GOAL_DEFS, GOAL_MONTHS, GOAL_RATINGS, REGION_NAMES, SAVE_FORMAT, SAVE_VERSION, STOP
+from config import CAL, DAYS_PER_YEAR, GOAL_DEADLINE_DAYS, GOAL_DEFS, GOAL_MONTHS, GOAL_RATINGS, HISTORY_DAYS, MONTHLY_KEEP, REGION_NAMES, SAVE_FORMAT, SAVE_VERSION, STOP
 from goals import blank_goal_state, month_quality_ok, region_market_share, weighted_load_factor
 from model import Aircraft, Airline, Route, World
 from settle import settle_day
@@ -184,6 +184,9 @@ class Game:
                         "cash": al.cash, "debt": al.debt,
                         "fleet": len(al.fleet), "routes": len(al.routes),
                     })
+                    # 月报只留最近 36 条：目标判定最多回看 24 个月
+                    if len(al.monthly) > MONTHLY_KEEP:
+                        del al.monthly[:-MONTHLY_KEEP]
 
         if day % 30 == 0 or day == 1:
             alive = [a for a in airlines if a.alive]
@@ -789,12 +792,12 @@ class Game:
             al.rep = float(ad.get("rep", 50.0))
             al.rank_score = float(ad.get("rank_score", 0.0))
             al.alive = bool(ad.get("alive", True))
-            al.history = list(ad.get("history") or [])
+            al.history = list(ad.get("history") or [])[-HISTORY_DAYS:]
             al.neg_days = int(ad.get("neg_days", 0))
             al.dead_reason = ad.get("dead_reason")
             al.dead_day = ad.get("dead_day")
             al.contractions = int(ad.get("contractions", 0))
-            al.monthly = list(ad.get("monthly") or [])
+            al.monthly = list(ad.get("monthly") or [])[-MONTHLY_KEEP:]
             al.ebitda_12m = float(ad.get("ebitda_12m", 0.0))
             al.last_costs = ad.get("last_costs")
 

@@ -287,18 +287,21 @@ python -m compileall -q server sim calibration
 
 ## 8. 存档格式
 
-`saves/*.json`，顶层两段：
+`saves/*.json`，顶层是存档元信息 + 一局游戏的完整状态：
 
 ```json
 {
-  "meta": {"version": 1, "saved_at": "...", "day": 32, "name": "..."},
+  "format": "airline-sim-save", "version": 1,
+  "saved_at": "...", "name": "...", "auto": false,
   "game": {
-    "day": 32, "seed": 42, "speed": 4, "paused": false,
+    "day": 32, "seed": 42, "speed": 4, "paused": false, "next_rid": 9,
     "mode": "goals", "mode_chosen": true,
     "goal_start_day": 0, "goal_deadline_day": 3600,
     "goal_state": {...}, "settlement": null,
-    "player": {...}, "airlines": [...], "routes": [...],
-    "world": {"slots_used": {...}}, "log": [...], "rng_state": "..."
+    "airlines": [{"name": "...", "is_player": true, "fleet": [...], "routes": [...],
+                  "history": [...], "monthly": [...]}],
+    "world": {"slots_used": {...}}, "log": [...], "snapshots": [...],
+    "params": {...}, "rng_state": "..."
   }
 }
 ```
@@ -306,7 +309,12 @@ python -m compileall -q server sim calibration
 - 写入走「临时文件 + 原子替换」
 - `from_save()` 手工校验并重建对象；旧存档缺 `mode/goal_*` 时默认沙盒，仍可读
 - 随机数状态入档：同一天重放结果一致（FR-1202）
-- 单档约 0.4 MB（50 AI、30 天量级），上限 5 MB 有余量
+- 单档约 1.7 MB（50 AI、day 1000 量级）；逐日记录只留最近 90 天、月报只留最近 36 条，
+  存档体积不随天数线性膨胀（见下条）
+- `history` 只保留 `HISTORY_DAYS = 90` 天：读取方最多回溯 30 天（月报聚合、快照、图表），
+  写档时截断；`from_save()` 也会裁掉旧档里的超长历史，所以老存档一读一存就瘦下来
+  （实测 day 1005：10.8 MB → 1.7 MB）
+- `monthly` 只保留 `MONTHLY_KEEP = 36` 条，满足 FR-706「12 个月可回溯」与高质高效目标的 24 个月窗口
 
 ---
 

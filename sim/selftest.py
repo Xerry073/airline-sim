@@ -560,6 +560,43 @@ def main():
           and abs(loaded.player.cash - g4.player.cash) < 1e-9
           and len(loaded.airlines) == len(g4.airlines))
 
+    # ---------- 存档体积：逐日/逐月记录只留近期窗口 ----------
+    # 回归：history 每天追加且从不截断，51 家 × 995 天占了 day 1005 存档的 11.3 / 10.7 MB。
+    # 读取方只有 history[-1] 与 history[-30:]，所以保留 HISTORY_DAYS 天即可。
+    g_long = S.Game(n_ai=3, with_player=True, seed=31)
+    for _ in range(S.HISTORY_DAYS + 40):
+        g_long.advance_day()
+    hist_lens = {len(al.history) for al in g_long.airlines if al.alive}
+    check("UI-04", f"跑 {(S.HISTORY_DAYS + 40)} 天后逐日记录被截到 {S.HISTORY_DAYS} 天以内",
+          all(len(al.history) <= S.HISTORY_DAYS for al in g_long.airlines)
+          and len(g_long.player.history) == S.HISTORY_DAYS,
+          f"各航司历史长度 {sorted(hist_lens)}")
+    check("UI-04", f"月报只保留最近 {S.MONTHLY_KEEP} 条",
+          all(len(al.monthly) <= S.MONTHLY_KEEP for al in g_long.airlines),
+          f"{max((len(al.monthly) for al in g_long.airlines), default=0)} 条")
+
+    # 旧存档里超长的 history 在读档时被裁掉，末尾状态保持不变
+    raw = json.loads(json.dumps(g_long.to_save(), ensure_ascii=False))
+    p_raw = next(a for a in raw["game"]["airlines"] if a["is_player"])
+    tail = p_raw["history"][-1]
+    tail_month = p_raw["monthly"][-1] if p_raw["monthly"] else None
+    p_raw["history"] = p_raw["history"] * 11 + p_raw["history"][-1:]
+    p_raw["monthly"] = p_raw["monthly"] * 11 + p_raw["monthly"][-1:]
+    trimmed = S.Game.from_save(raw)
+    check("UI-04", "读档裁掉超长历史并保留最新一天的数据",
+          len(trimmed.player.history) == S.HISTORY_DAYS
+          and trimmed.player.history[-1] == tail
+          and len(trimmed.player.monthly) == S.MONTHLY_KEEP
+          and trimmed.player.monthly[-1] == tail_month
+          and abs(trimmed.player.cash - g_long.player.cash) < 1e-9,
+          f"history {len(trimmed.player.history)} / monthly {len(trimmed.player.monthly)}")
+    day_before = trimmed.day
+    trimmed.advance_day()
+    check("UI-04", "裁剪后的存档可以继续推进（月报窗口仍有 30 天可用）",
+          trimmed.day == day_before + 1
+          and len(trimmed.player.history) == S.HISTORY_DAYS
+          and all(len(al.monthly) <= S.MONTHLY_KEEP for al in trimmed.airlines))
+
     # ---------- 汇总 ----------
     print("\n" + "=" * 60)
     print(f"通过 {len(PASS)} / {len(PASS) + len(FAIL)}")

@@ -4,7 +4,7 @@
 由 sim/simulate.py 拆分而来；只允许依赖更靠前的分层，不要反向 import。
 """
 
-from config import ECON
+from config import ECON, HISTORY_DAYS
 from market import allocate, route_direct_cost
 from products import cabin_split_for
 
@@ -105,6 +105,9 @@ def settle_day(world, airlines, params, day=0):
         al.history.append({"pax": t_pax, "revenue": revenue, "cost": cost, "ebitda": ebitda,
                            "cash": al.cash, "debt": al.debt, "fleet": len(al.fleet),
                            "routes": len(al.routes), "on_time": on_time})
+        # 只保留最近的逐日记录：读取方最多回溯 30 天，长局存档不随天数线性膨胀
+        if len(al.history) > HISTORY_DAYS:
+            del al.history[:-HISTORY_DAYS]
 
         # 航线载客率：客流与座位都按「航段」计，多段航线才不会超过 100%
         for r in al.routes:

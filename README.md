@@ -129,4 +129,4 @@ powershell -ExecutionPolicy Bypass -File tools/package.ps1 -Version 1.0
 
 - 单机 Demo：后端只监听 `127.0.0.1`，不做鉴权/限流/字段级校验，详见开发者文档「Demo 边界」
 - 时间：1 游戏日 = 60 秒 ÷ 倍速（默认 4 倍速 ≈ 15 秒一天）
-- 存档：JSON 明文，单档约 0.4 MB（50 AI、30 天量级）
+- 存档：JSON 明文，单档约 1.7 MB（50 AI、day 1000 量级）；逐日记录只保留最近 90 天，长局不会越存越大
