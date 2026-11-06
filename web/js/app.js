@@ -209,6 +209,13 @@ function render(){
     $("#rank").textContent=p.rank?`排名 #${p.rank}`:"未排名";
     const k=p.kpi||{}, eb=k.ebitda||0;
     const cap=p.capacity||{}, util=cap.hours_cap?cap.hours_used/cap.hours_cap:0;
+    const byType=cap.pools||[];
+    const worst=byType.slice().sort((a,b)=>
+      (b.hours_cap?b.hours_used/b.hours_cap:0)-(a.hours_cap?a.hours_used/a.hours_cap:0))[0];
+    const worstPct=worst&&worst.hours_cap?Math.round(100*worst.hours_used/worst.hours_cap):null;
+    const capCell=worst&&worstPct!==null
+      ? `<b>${worst.type}</b> ${worstPct}%`
+      : `${(cap.hours_used||0).toFixed(1)}/${(cap.hours_cap||0).toFixed(0)}h`;
     $("#kpis").innerHTML=`
       <div class="kpi"><div class="l">现金 ¥M</div><div class="v">${money(p.cash)}</div></div>
       <div class="kpi"><div class="l">负债 ¥M</div><div class="v">${money(p.debt)}</div></div>
@@ -216,8 +223,8 @@ function render(){
       <div class="kpi"><div class="l">日 EBITDA</div><div class="v ${eb>=0?'pos':'neg'}">${money(eb)}</div></div>
       <div class="kpi"><div class="l">口碑</div><div class="v">${(p.reputation||0).toFixed(1)}</div></div>
       <div class="kpi"><div class="l">机队/航线</div><div class="v">${p.fleet.length}/${p.routes.length}</div></div>
-      <div class="kpi" title="固定开销按机队发生，与飞多少班无关；占比低说明飞机在闲置"><div class="l">日占机</div>
-        <div class="v ${util>=0.75?'pos':(util<0.5?'warn':'')}">${(cap.hours_used||0).toFixed(1)}/${(cap.hours_cap||0).toFixed(0)}h</div></div>`;
+      <div class="kpi" title="每个机型独立计算：每架 16 h / 8 段，机型之间不能互相借运力"><div class="l">日占机</div>
+        <div class="v ${worstPct===null?'':(worstPct>=85?'neg':(worstPct<50?'warn':'pos'))}">${capCell}</div></div>`;
     $("#routecount").textContent=p.routes.length;
     $("#routes").innerHTML=p.routes.map(r=>`
       <tr class="rrow" onclick="openOp('route',${r.id})" title="点击调整价格 / 班次">
@@ -266,6 +273,8 @@ async function cmd(text){
     buy:()=>({action:"buy_aircraft",args:{ac_type:a[0]||"A320",base:a[1]}}),
     lease:()=>({action:"buy_aircraft",args:{ac_type:a[0]||"A320",base:a[1],lease:true}}),
     sell:()=>({action:"sell_aircraft",args:{aircraft_id:Number(a[0])}}),
+    rebase:()=>({action:"rebase_aircraft",args:{aircraft_id:Number(a[0]),
+      base:(a[1]||"").toUpperCase()}}),
     loan:()=>({action:"take_loan",args:{amount:Number(a[0])}}),
     rename:()=>({action:"rename_airline",args:{name:a.join(" ")}}),
   };

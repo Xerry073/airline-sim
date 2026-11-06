@@ -9,7 +9,7 @@ from config import ECON, FLIGHT, STOP
 from market import cabin_demand
 from model import Route
 from products import cabin_split_for
-from util import clamp
+from util import clamp, runway_allows
 
 
 # ============================================================
@@ -87,8 +87,7 @@ def validate_stopover(world, segments, ac_type, daily_flights=1):
     if max(world.airports[s]["pax"] for s in segments) <= 0:
         return False, "机场无效"
     for s in segments:
-        need = {"支线": ("R",), "窄体": ("R", "S", "W"), "宽体": ("W",)}[t["class"]]
-        if world.airports[s]["runway"] not in need:
+        if not runway_allows(world.airports[s], t["class"]):
             return False, f"{s} 跑道等级不满足 {ac_type}"
 
     total = sum(world.airport_dist(segments[i], segments[i + 1]) for i in range(len(segments) - 1))
@@ -164,13 +163,15 @@ def try_add_stopover(world, al, params):
         for _, code in cands[:3]:
             segs = [a, b, code]
             newr = Route(al, segs, r.daily_flights, r.ac_type, r.price_index)
-            delta_h = al.route_hours(newr) - base_hours
-            if al.total_hours() + delta_h > al.capacity_hours():
+            # 换线前后按机型分池核对运力（旧线换掉、新线加进来）
+            al.routes.remove(r)
+            fits = al.fits_route(newr)
+            if not fits:
+                al.routes.append(r)
                 continue
             # 换掉旧航线
             for s in set(r.segments):
                 world.routes_at[s] = max(0, world.routes_at.get(s, 0) - 1)
-            al.routes.remove(r)
             al.routes.append(newr)
             for s in set(segs):
                 world.routes_at[s] = world.routes_at.get(s, 0) + 1
@@ -215,7 +216,12 @@ def ai_decide(world, al, rng, params):
         if r.lf_ewma > 0.85 and r.daily_flights < 14:
             saved = r.daily_flights
             r.daily_flights += 1
-            if al.total_hours() > al.capacity_hours():
+            key = (r.ac_type, r.segments[0])
+            hours, segs = al.usage_by_base()
+            cap_h, cap_s = al.base_capacity(*key)
+            over = (hours.get(key, 0.0) > cap_h + 1e-9
+                    or segs.get(key, 0) > cap_s + 1e-9)
+            if over:
                 if not (al.cash >= world.ac(r.ac_type)["price"] * 1.6 and al.buy_aircraft(r.ac_type)):
                     r.daily_flights = saved
     # 4. 扩张（连续亏损中不扩张；但完全没有航线时必须自救）
@@ -257,8 +263,11 @@ def ai_decide(world, al, rng, params):
     for air, ca, cb, d in cands:
         if opened >= 2:
             break
-        a1 = world.cities[ca]["airports"][0]
-        a2 = world.cities[cb]["airports"][0]
+        bases = {(a.base or "") for a in al.fleet}
+        a1 = next((ap for ap in world.cities[ca]["airports"] if ap in bases),
+                  world.cities[ca]["airports"][0])
+        a2 = next((ap for ap in world.cities[cb]["airports"] if ap in bases),
+                  world.cities[cb]["airports"][0])
         # FR-502-1：HUB 机场保留 30% 容量，非 HUB 公司只能用 70%
         if world.slots_used[a1] + 2 > usable_slots(world, al, a1):
             continue
@@ -268,24 +277,34 @@ def ai_decide(world, al, rng, params):
         t = world.ac(code)
         if d > t["range"] * 0.95:
             continue
+        # 跑道等级不允许（宽体只能落 W 级机场）就降级到窄体，否则放弃
+        if not (runway_allows(world.airports[a1], t["class"])
+                and runway_allows(world.airports[a2], t["class"])):
+            if (d <= world.ac("A320")["range"] * 0.95
+                    and runway_allows(world.airports[a1], "窄体")
+                    and runway_allows(world.airports[a2], "窄体")):
+                code, t = "A320", world.ac("A320")
+            else:
+                continue
         r = Route(al, [a1, a2], 1, code, 0.97)
-        need_h = al.route_hours(r)
-        need_s = 2 * r.n_segments * r.daily_flights
-        # 机队周转不足时先买飞机（宁买不错过）
-        if (al.total_hours() + need_h > al.capacity_hours()
-                or al.total_segments() + need_s > al.capacity_segments()):
+        # 运力按机型分池：不够就先买同型机（最多补 2 架）
+        for _ in range(2):
+            if al.fits_route(r):
+                break
             price = world.ac(code)["price"]
             shortfall = price - al.cash
             if shortfall > 0:
                 # 允许部分债务融资：这是「过度扩张 → 破产」的真实来源
                 room = al.borrow_capacity()
                 if room < shortfall * 0.5:
-                    continue
+                    break
                 loan = min(shortfall, room)
                 al.debt += loan
                 al.cash += loan
             if not al.buy_aircraft(code, base=a1):
-                continue
+                break
+        if not al.fits_route(r):
+            continue
         al.routes.append(r)
         world.routes_at[a1] += 1
         world.routes_at[a2] += 1

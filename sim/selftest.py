@@ -428,6 +428,46 @@ def main():
           cap7.get("hours_cap", 0) > 0 and 0 < cap7.get("hours_used", 0) <= cap7["hours_cap"]
           and cap7.get("segments_cap", 0) > 0, str(cap7))
 
+    # ---------- 运力按机型分池（E190 空闲不能被 A320 借用） ----------
+    g8 = S.Game(n_ai=0, with_player=True, seed=14)
+    for segs in (["PEK", "SHA"], ["PEK", "CAN"], ["PEK", "CTU"]):
+        g8.apply("open_route", {"segments": segs, "daily_flights": 1, "ac_type": "A320"})
+    r_full = g8.apply("open_route", {"segments": ["PEK", "XIY"],
+                                     "daily_flights": 1, "ac_type": "A320"})
+    check("UI-07", "A320 运力按机型封顶，超出时报该机型运力不足",
+          not r_full.get("ok") and "A320 运力不足" in str(r_full.get("reason")),
+          str(r_full))
+    g8.apply("buy_aircraft", {"ac_type": "E190", "base": "PEK", "lease": True})
+    r_e = g8.apply("open_route", {"segments": ["PEK", "DLC"],
+                                  "daily_flights": 1, "ac_type": "E190"})
+    check("UI-07", "空闲的 E190 可以单独开线（A320 满员也能开）",
+          r_e.get("ok"), str(r_e))
+    r_unknown = g8.apply("open_route", {"segments": ["PEK", "SHA"],
+                                        "daily_flights": 1, "ac_type": "B789"})
+    check("UI-07", "机队没有的机型不能开线",
+          not r_unknown.get("ok") and "机队没有 B789" in str(r_unknown.get("reason")),
+          str(r_unknown))
+    g8.apply("buy_aircraft", {"ac_type": "A333", "base": "PEK", "lease": True})
+    r_runway = g8.apply("open_route", {"segments": ["PEK", "LXA"],
+                                       "daily_flights": 1, "ac_type": "A333"})
+    check("UI-07", "跑道等级按「机型 ≤ 机场」判定：宽体不能落 S 级机场",
+          not r_runway.get("ok") and "跑道等级" in str(r_runway.get("reason")),
+          str(r_runway))
+
+    # 机场 × 机型双维度：飞机在哪个机场，就只能从那里起飞（否则等于瞬移）
+    r_far = g8.apply("open_route", {"segments": ["SHA", "PEK"],
+                                    "daily_flights": 1, "ac_type": "E190"})
+    check("UI-07", "基地不在 SHA 时不能在 SHA 开线",
+          not r_far.get("ok") and "SHA 的 E190" in str(r_far.get("reason")), str(r_far))
+    # 先租一架闲置的 E190（前面那架已经在飞 PEK 航线，不能调走）
+    fresh = g8.apply("buy_aircraft", {"ac_type": "E190", "base": "PEK", "lease": True})
+    e_id = fresh.get("aircraft_id")
+    r_rb = g8.apply("rebase_aircraft", {"aircraft_id": e_id, "base": "SHA"})
+    r_after = g8.apply("open_route", {"segments": ["SHA", "PEK"],
+                                      "daily_flights": 1, "ac_type": "E190"})
+    check("UI-07", "调机到 SHA 后可以在 SHA 开线",
+          r_rb.get("ok") and r_after.get("ok"), str(r_rb) + " / " + str(r_after))
+
     # ---------- AI 公开航线网络 ----------
     g3 = S.Game(n_ai=3, with_player=True, seed=11)
     for _ in range(10):

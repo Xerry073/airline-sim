@@ -12,7 +12,7 @@ from config import CAL, DAYS_PER_YEAR, GOAL_DEADLINE_DAYS, GOAL_DEFS, GOAL_MONTH
 from goals import blank_goal_state, month_quality_ok, region_market_share, weighted_load_factor
 from model import Aircraft, Airline, Route, World
 from settle import settle_day
-from util import slot_touches
+from util import runway_allows, slot_touches
 
 
 # ============================================================
@@ -37,6 +37,26 @@ def reclaim_stale_slots(world, airlines):
                 r.slot_low_days = 0
                 reclaimed += 1
     return reclaimed
+
+
+def capacity_pools(airline):
+    """按 (机型, 基地) 汇总运力占用：每架 16 h / 8 段，机型与基地都不共用。"""
+    used_h, used_s = airline.usage_by_base()
+    keys = set(used_h) | {(a.type, a.base or "") for a in airline.fleet}
+    rows = []
+    for ac_type, base in sorted(keys):
+        cap_h, cap_s = airline.base_capacity(ac_type, base)
+        rows.append({
+            "type": ac_type, "base": base,
+            "count": sum(1 for a in airline.fleet
+                         if a.type == ac_type and (a.base or "") == base),
+            "hours_used": round(used_h.get((ac_type, base), 0.0), 1),
+            "hours_cap": round(cap_h, 1),
+            "segments_used": used_s.get((ac_type, base), 0), "segments_cap": cap_s,
+            "over": (used_h.get((ac_type, base), 0.0) > cap_h + 1e-9
+                     or used_s.get((ac_type, base), 0) > cap_s),
+        })
+    return rows
 
 
 
@@ -195,6 +215,8 @@ class Game:
                 return {"ok": False, "reason": "机场代码不存在"}
             if ac not in w._aircraft_types:
                 return {"ok": False, "reason": "机型不存在"}
+            if not any(a.type == ac for a in p.fleet):
+                return {"ok": False, "reason": f"机队没有 {ac}，请先购买或租赁"}
             if not (1 <= flights <= 14):
                 return {"ok": False, "reason": "班次须在 1–14 之间"}
             if len(segs) == 3:
@@ -207,11 +229,21 @@ class Game:
                     return {"ok": False, "reason": f"航段距离 {d:.0f} km 过短"}
                 if d > w.ac(ac)["range"] * 0.95:
                     return {"ok": False, "reason": "超出机型航程"}
+                for code in segs:
+                    if not runway_allows(w.airports[code], w.ac(ac)["class"]):
+                        return {"ok": False,
+                                "reason": f"{code} 跑道等级不满足 {ac}"}
             r = Route(p, segs, flights, ac, 0.97)
-            if p.total_hours() + p.route_hours(r) > p.capacity_hours():
-                return {"ok": False, "reason": "机队运力不足，请先购机或减班"}
-            if p.total_segments() + p.route_segments_needed(r) > p.capacity_segments():
-                return {"ok": False, "reason": "每日航段数已达机型上限"}
+            # 运力按机型分池：E190 空闲的时间不能给 A320 航线用
+            if not p.fits_route(r):
+                key = (ac, segs[0])
+                used_h, used_s = p.usage_by_base()
+                cap_h, cap_s = p.base_capacity(*key)
+                return {"ok": False, "reason": (
+                    f"{segs[0]} 的 {ac} 运力不足：已占 {used_h.get(key, 0):.1f}/{cap_h:.0f} h、"
+                    f"{used_s.get(key, 0):.0f}/{cap_s:.0f} 段，本次需要 "
+                    f"{p.route_hours(r):.1f} h / {p.route_segments_needed(r)} 段；"
+                    f"可以从别处调机、换机型或再买一架 {ac}（基地 {segs[0]}）")}
             # FR-403：每机场占用 2 × 触及航段数 × daily_flights
             touches = slot_touches(segs)
             slot_need = {}
@@ -256,10 +288,18 @@ class Game:
             if not (1 <= n <= 14):
                 return {"ok": False, "reason": "班次须在 1–14 之间"}
             old = r.daily_flights
+            key = (r.ac_type, r.segments[0])
+            ex0 = p.excess_by_base()
             r.daily_flights = n
-            if p.total_hours() > p.capacity_hours():
+            ex1 = p.excess_by_base()
+            if ex1[0] > ex0[0] + 1e-9 or ex1[1] > ex0[1] + 1e-9:
                 r.daily_flights = old
-                return {"ok": False, "reason": "机队运力不足"}
+                used_h, used_s = p.usage_by_base()
+                cap_h, cap_s = p.base_capacity(*key)
+                return {"ok": False, "reason": (
+                    f"{key[1]} 的 {r.ac_type} 运力不足：已占 "
+                    f"{used_h.get(key, 0):.1f}/{cap_h:.0f} h、"
+                    f"{used_s.get(key, 0):.0f}/{cap_s:.0f} 段，请先购机或减班")}
             return {"ok": True, "daily_flights": n}
 
         if action == "set_aircraft":
@@ -281,7 +321,6 @@ class Game:
                 if not ok:
                     return {"ok": False, "reason": why}
             else:
-                runway_ok = {"支线": ("R",), "窄体": ("R", "S", "W"), "宽体": ("W",)}
                 for i in range(r.n_segments):
                     a, b = r.segments[i], r.segments[i + 1]
                     d = w.airport_dist(a, b)
@@ -290,16 +329,51 @@ class Game:
                     if d > t["range"] * 0.95:
                         return {"ok": False, "reason": f"{ac} 航程不足（{d:.0f} km）"}
                     for code in (a, b):
-                        if w.airports[code]["runway"] not in runway_ok[t["class"]]:
+                        if not runway_allows(w.airports[code], t["class"]):
                             return {"ok": False, "reason": f"{code} 跑道等级不满足 {ac}"}
             old = r.ac_type
+            ex0 = p.excess_by_base()
             r.ac_type = ac
-            # 换更慢/过站更久的机型可能吃穿机队运力
-            if p.total_hours() > p.capacity_hours() + 1e-9:
+            ex1 = p.excess_by_base()
+            # 换更慢/过站更久的机型可能吃穿该机型的运力
+            if ex1[0] > ex0[0] + 1e-9 or ex1[1] > ex0[1] + 1e-9:
                 r.ac_type = old
-                return {"ok": False, "reason": "机队运力不足：该机型更慢，日占机超过上限"}
+                key = (ac, r.segments[0])
+                used_h, used_s = p.usage_by_base()
+                cap_h, cap_s = p.base_capacity(*key)
+                return {"ok": False, "reason": (
+                    f"{key[1]} 的 {ac} 运力不足：换机后该池已占 "
+                    f"{used_h.get(key, 0):.1f}/{cap_h:.0f} h、"
+                    f"{used_s.get(key, 0):.0f}/{cap_s:.0f} 段")}
             self.log_event("更换机型", f"#{r.rid} {'→'.join(r.segments)} {old} → {ac}")
             return {"ok": True, "ac_type": ac, "changed": True}
+
+        if action == "rebase_aircraft":
+            aid = args.get("aircraft_id")
+            base = str(args.get("base", "")).upper()
+            a = next((x for x in p.fleet if x.id == aid), None)
+            if not a:
+                return {"ok": False, "reason": "飞机不存在"}
+            if base not in w.airports:
+                return {"ok": False, "reason": "机场不存在"}
+            old_base = a.base
+            if (old_base or "") == base:
+                return {"ok": True, "base": base, "fee": 0.0, "changed": False}
+            t = w.ac(a.type)
+            d = w.airport_dist(old_base, base) if old_base else 0.0
+            fee = round(d / 1000.0 * 0.25 * (t["mtow"] / 70.0), 2)
+            if p.cash < fee:
+                return {"ok": False, "reason": f"调机费 {fee:.2f} ¥M，现金不足"}
+            ex0 = p.excess_by_base()
+            a.base = base
+            ex1 = p.excess_by_base()
+            if ex1[0] > ex0[0] + 1e-9 or ex1[1] > ex0[1] + 1e-9:
+                a.base = old_base
+                return {"ok": False,
+                        "reason": "调机后原基地运力不足，先给那边的航线减班或关线"}
+            p.cash -= fee
+            self.log_event("调机", f"{a.type} 基地 {old_base or '—'} → {base}，调机费 {fee:.2f} ¥M")
+            return {"ok": True, "base": base, "fee": fee, "changed": True}
 
         if action == "add_hub":
             code = str(args.get("airport", "")).upper()
@@ -837,6 +911,8 @@ class Game:
                     "hours_cap": round(p.capacity_hours(), 1),
                     "segments_used": round(p.total_segments(), 1),
                     "segments_cap": p.capacity_segments(),
+                    # 按机型分池：每架 16 h / 8 段，互不借用
+                    "pools": capacity_pools(p),
                 },
             }
         out["goals"] = self.goals_snapshot()

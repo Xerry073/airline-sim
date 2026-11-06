@@ -226,6 +226,7 @@ function renderRouteOp(){
   const costs=(STATE.player&&STATE.player.costs)||null;
   const cap=(STATE.player&&STATE.player.capacity)||{};
   const utilPct=cap.hours_cap?Math.round(100*cap.hours_used/cap.hours_cap):null;
+  const typeCap=((cap.pools)||[]).find(x=>x.type===r.ac_type&&x.base===r.segments[0])||null;
   const gap=costs?profitSum-costs.fixed_total:null;
   const fixedCard=!costs
     ? `<div class="opcard"><h4>公司固定开销 <span>待结算</span></h4>
@@ -290,6 +291,7 @@ function renderRouteOp(){
         <select id="acsel">${acOpts}</select>
       </div>
       <div class="btnrow"><button id="acsave">更换机型</button><span class="hintline" id="achint"></span></div>
+      ${typeCap?`<div class="hintline">${typeCap.base} 的 ${typeCap.type} 运力 ${typeCap.hours_used}/${typeCap.hours_cap} h · 航段 ${typeCap.segments_used}/${typeCap.segments_cap}${typeCap.over?"（超载）":""}</div>`:""}
       <div class="hintline">换机型不买卖飞机：新机型必须在机队里已有，航程/跑道/日占机由后端校验。</div>
     </div>
     <div class="btnrow"><button class="danger" id="rclose">关闭这条航线</button><span class="hintline">关闭后时刻释放，不可撤销</span></div>`;
@@ -396,10 +398,23 @@ function renderFleetOp(){
       <td>${a.lease?"租赁":"自有"}</td><td>¥${acResale(a).toFixed(0)}M</td>
       <td><button class="mini danger" data-sell="${a.id}">出售</button></td></tr>`;
   }).join("")||'<tr><td colspan="6" style="color:#78899c">暂无飞机</td></tr>';
-  const baseOpts=hubs.map(h=>`<option value="${h}">${h}${AP[h]?" · "+AP[h].city:""}</option>`).join("")
-    ||'<option value="">无枢纽</option>';
+  const baseOpts=airportOptions(hubs[0]||"");
+  /* 运力按机型分池：每架 16 h / 8 段，各机型之间不能互相借用 */
+  const byType=(p.capacity&&p.capacity.pools)||[];
+  const capRows=byType.map(b=>{
+    const t=aircraftOf(b.type);
+    const pct=b.hours_cap?Math.round(100*b.hours_used/b.hours_cap):0;
+    const cls=b.over?"neg":(pct>=85?"warn":(pct>0?"pos":""));
+    const base=b.base||"—";
+    return `<div class="req"><span>${t?t.name:b.type} @ ${base} × ${b.count}</span>
+      <b class="${cls}">${b.hours_used}/${b.hours_cap} h（${pct}%）· 航段 ${b.segments_used}/${b.segments_cap}${b.over?" · 超载":""}</b></div>`;
+  }).join("");
+  const acSelect=fleet.map(a=>`<option value="${a.id}">#${a.id} ${a.type} @ ${a.base||"—"}</option>`).join("")
+    ||'<option value="">暂无飞机</option>';
+
   $("#opbody").innerHTML=`
     <div class="sectionline"><span>现有机队</span><span>${fleet.length} 架</span></div>
+    ${capRows}
     <div class="fleetlist"><table><thead><tr><th>机型</th><th>机龄</th><th>基地</th><th>方式</th><th>出售可得</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table></div>
     <div class="opcard" style="margin-top:12px">
@@ -411,6 +426,15 @@ function renderFleetOp(){
       <label class="checkrow"><input id="ac_lease" type="checkbox"> 租赁（押金约 3 个月租金）</label>
       <div class="hintline" id="acinfo"></div>
       <div class="btnrow"><button class="primary" id="ac_buy">购买</button><span class="hintline" id="achint"></span></div>
+    </div>
+    <div class="opcard">
+      <h4>调机 <span>把飞机挪到别的机场；调机费按距离计</span></h4>
+      <div class="grid2">
+        <div class="field" style="margin:0"><label>飞机</label><select id="rb_ac">${acSelect}</select></div>
+        <div class="field" style="margin:0"><label>新基地</label><select id="rb_base">${airportOptions("")}</select></div>
+      </div>
+      <div class="btnrow"><button id="rb_go">调机</button>
+        <span class="hintline" id="rb_hint">一架飞机一天只能从一个机场起飞；想在新机场开线，先把飞机调过去。</span></div>
     </div>`;
 
   const updateBuy=()=>{
@@ -425,6 +449,15 @@ function renderFleetOp(){
       (lease?"：租赁需支付押金，后端校验现金":(STATE.player.cash<t.price?"：现金不足":""));
   };
   $("#ac_type").onchange=updateBuy;
+  const rbGo=$("#rb_go");
+  if(rbGo) rbGo.onclick=async()=>{
+    const res=await api("/api/command",{action:"rebase_aircraft",args:{
+      aircraft_id:Number($("#rb_ac").value), base:$("#rb_base").value}});
+    if(res.ok){
+      toast(res.changed?`已调机到 ${res.base}（¥${res.fee}M）`:"基地未变");
+      await refresh(); renderOp();
+    }
+  };
   $("#ac_lease").onchange=updateBuy;
   updateBuy();
 
@@ -598,6 +631,7 @@ function renderHelpOp(){
       ${row("buy A320 PEK","购买一架 A320，基地北京")}
       ${row("lease B789 PEK","租赁一架 787-9，基地北京；押金从现金扣除")}
       ${row("sell 12","出售 12 号飞机；飞机号见「机队」")}
+      ${row("rebase 12 SHA","把 12 号飞机调机到上海；之后可在 SHA 开该机型的航线")}
       ${row("loan 500","借款 500 ¥M；额度由资产/EBITDA/权益决定")}
       ${row("rename 云翼航空","修改公司名称（2–20 个字符，不能重名）")}
     </tbody></table>

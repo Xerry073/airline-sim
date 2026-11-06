@@ -190,7 +190,11 @@ function renderMine(playerRoutes, opponentRoutes, fleet) {
       routes: playerRoutes, fleet: fleet || [{ type: playerRoutes[0].ac_type }],
       costs: { staff: 0.42, hub_fixed: 0.08, depreciation: 0.06, lease: 0.14,
                interest: 0, idle: 0, fixed_total: 0.70, total: 1.26 },
-      capacity: { hours_used: 22.3, hours_cap: 48, segments_used: 12, segments_cap: 24 },
+      capacity: {
+        hours_used: 22.3, hours_cap: 48, segments_used: 12, segments_cap: 24,
+        pools: [{ type: "A320", base: "PEK", count: 2, hours_used: 26.2, hours_cap: 32,
+                  segments_used: 10, segments_cap: 16, over: false }],
+      },
     },
     opponent_routes: opponentRoutes,
   };
@@ -269,6 +273,14 @@ const mine = {
     && /机队日占机/.test(html) && /22\.3\/48 h（46%）/.test(html),
     "航线管理显示固定开销、航线利润合计与占机率",
     html.replace(/\s+/g, " ").slice(0, 260));
+}
+
+// 14) 运力池按「机型 + 基地」展示；调机入口接在后端 rebase_aircraft 上
+{
+  const html = renderMine([mine], []);
+  check(/PEK 的 A320 运力 26\.2\/32 h/.test(html)
+    && /action:"rebase_aircraft"/.test(panelsSrc) && /id="rb_go"/.test(panelsSrc),
+    "航线面板显示该基地的机型运力池，机队面板提供调机入口");
 }
 
 console.log("\n" + (failed ? "FAILED" : "OK") + "  " + passed + " passed, " + failed + " failed");

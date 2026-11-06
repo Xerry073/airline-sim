@@ -391,6 +391,46 @@ class Airline:
         return (self.total_hours() + self.route_hours(r) <= self.capacity_hours()
                 and self.total_segments() + self.route_segments_needed(r) <= self.capacity_segments())
 
+    # ---------- 按「机型 + 出发机场」分池的运力 ----------
+    # 一架飞机一天只能从一个机场起飞，航线又都是往返，所以运力池是 (机型, 飞机基地)：
+    # A320@PEK 的 16 h 不能给 A320@SHA 的航线用，更不能给 E190 用；
+    # 想在别的机场开线，得先调机（rebase_aircraft）把飞机挪过去。
+
+    def base_capacity(self, ac_type, base):
+        """该 (机型, 基地) 池的 (日占机上限, 日航段上限)"""
+        n = sum(1 for a in self.fleet
+                if a.type == ac_type and (a.base or "") == (base or ""))
+        return FLIGHT["max_hours_per_day"] * n, FLIGHT["max_segments_per_day"] * n
+
+    def usage_by_base(self):
+        """按 (机型, 航线出发机场) 汇总已占用 (小时, 航段)"""
+        hours, segs = {}, {}
+        for r in self.routes:
+            key = (r.ac_type, r.segments[0])
+            hours[key] = hours.get(key, 0.0) + self.route_hours(r)
+            segs[key] = segs.get(key, 0) + self.route_segments_needed(r)
+        return hours, segs
+
+    def excess_by_base(self):
+        """超出上限的 (小时, 航段) 合计；用于「允许补救、禁止恶化」的变更校验"""
+        hours, segs = self.usage_by_base()
+        keys = set(hours) | {(a.type, a.base or "") for a in self.fleet}
+        ex_h = ex_s = 0.0
+        for key in keys:
+            cap_h, cap_s = self.base_capacity(*key)
+            ex_h += max(0.0, hours.get(key, 0.0) - cap_h)
+            ex_s += max(0.0, segs.get(key, 0) - cap_s)
+        return ex_h, ex_s
+
+    def fits_route(self, r):
+        """把航线 r 放进机队是否还装得下（按 r 的机型与出发机场分池，r 不要求在 routes 里）"""
+        hours, segs = self.usage_by_base()
+        key = (r.ac_type, r.segments[0])
+        cap_h, cap_s = self.base_capacity(*key)
+        return (hours.get(key, 0.0) + self.route_hours(r) <= cap_h + 1e-9
+                and segs.get(key, 0) + self.route_segments_needed(r) <= cap_s + 1e-9)
+
+
     def can_cover(self, r):
         need_h = self.route_hours(r)
         need_s = self.route_segments_needed(r)
