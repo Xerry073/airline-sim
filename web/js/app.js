@@ -187,6 +187,7 @@ function toast(msg,bad){
   t._h=setTimeout(()=>t.classList.remove("show"),1700);
 }
 const money=v=>(v>=0?"":"-")+Math.abs(v).toLocaleString("zh-CN",{maximumFractionDigits:1});
+let BOOT_PROMPTED=false;   // 启动选择面板只弹一次
 
 function render(){
   const s=STATE; if(!s) return;
@@ -342,6 +343,10 @@ async function refresh(){
     drawLabels();
     syncRoutes();
     syncRivalRoutes();
+    if(STATE&&STATE.boot&&!BOOT_PROMPTED){
+      BOOT_PROMPTED=true;
+      openOp("boot");
+    }
   }catch(e){ $("#log").textContent="后端未连接"; }
 }
 

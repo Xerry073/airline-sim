@@ -4,6 +4,44 @@
 
 ---
 
+## 2026-11-07 · 交互轮：启动时先选「继续上次对局 / 开新对局」
+
+反馈：启动就直接接着旧档跑，没有选择余地；想开新局还得记得加 `-NoResume`。
+
+### 变更
+
+- **后端**（`server/session.py`、`server/api.py`）
+  - 进程启动恢复 `autosave` 后，先 `paused = true` 并设置 `boot_choice = {day, name, was_paused}`
+  - `GET /api/state` 新增 `boot` 字段（仅启动后待选择时非空）
+  - 新增 `POST /api/boot_continue`：清掉 `boot` 提示，按存档时的暂停状态恢复
+  - `POST /api/new_game` 也会清掉 `boot` 提示
+- **前端**（`web/js/panels.js`、`web/js/app.js`、`web/js/goals.js`）
+  - 首次拿到 `boot` 时弹出「开始游戏」面板：继续（第 N 天）／开新对局·沙盒／开新对局·目标／载入其他存档…
+  - 开新对局走面板时跳过「会重置进度」的二次确认（已经在这个面板里选过了）
+  - 面板只弹一次（`BOOT_PROMPTED`），关掉后仍可用顶栏速度键与存档面板操作
+- **文档**：玩家手册新增「启动时的选择」；开发者文档补 `/api/boot_continue` 与 `boot` 字段
+
+### 验证（临时副本 + 8791 端口实测）
+
+```text
+启动后  GET /api/state      → boot={"day":720,"name":"自动存档","was_paused":true}，paused=true
+继续    POST /api/boot_continue → {"ok":true,"paused":true}，再次 GET 时 boot=null
+开新局  POST /api/new_game  → boot=null，day=0
+```
+
+### 测试
+
+```text
+python sim/selftest.py        -> 67 / 67
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 31 / 31
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     -> 23 / 23
+node tools/route_gui_check.js -> 10 / 10
+```
+
+---
+
 ## 2026-11-07 · 视觉轮：航线航段分隔符由箭头改为等号
 
 反馈：航线显示里的 `→` 太像「流程箭头」，读起来以为是「飞往」，希望换成 `＝`。

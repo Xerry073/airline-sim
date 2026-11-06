@@ -152,7 +152,8 @@ python server/app.py --port 8777 --ai 50
 | GET | `/api/state` | 世界快照（前端每秒轮询） |
 | GET | `/api/market?from=PEK&to=SHA` | 两机场之间的市场情报（开线向导用） |
 | GET | `/api/saves` | 本地存档列表 |
-| POST | `/api/new_game` | `{"mode":"sandbox"\|"goals"}` 重建第 0 天 |
+| POST | `/api/boot_continue` | `{}` 启动选择「继续上次对局」：清掉 boot 提示并恢复暂停状态 |
+| POST | `/api/new_game` | `{"mode":"sandbox"\|"goals"}` 重建第 0 天（同时清掉 boot 提示） |
 | POST | `/api/save` | `{"name":"..."}` 保存并命名 |
 | POST | `/api/load` | `{"id":"save_..."}` 载入 |
 | POST | `/api/delete_save` | `{"id":"save_..."}` 删除 |
@@ -204,6 +205,7 @@ goals           {mode, mode_chosen, setup_required, deadline_day, days_left,
                  years_left, progress[], achieved_count, rating, scored,
                  settled, settlement}
 log[]           最近 40 条事件
+boot            启动选择：进程启动并恢复自动存档时为 {day,name,was_paused}，否则 null
 ```
 
 - `rivals[].rank` 是**全体存活公司**名次（与 `player.rank` 同口径），过滤自己后会留空档

@@ -36,12 +36,17 @@ class Session:
         self._stop = False
         self._last = time.time()
         self._last_autosave = time.time()
+        self.boot_choice = None
         resumed = False
         if resume:
             try:
                 self.load_game("autosave")
                 resumed = True
-                print(f"  已恢复自动存档：第 {self.game.day} 天")
+                # 恢复后先暂停，等页面选择「继续上次对局」还是「开新对局」
+                self.boot_choice = {"day": self.game.day, "name": "自动存档",
+                                    "was_paused": bool(self.game.paused)}
+                self.game.paused = True
+                print(f"  已恢复自动存档：第 {self.game.day} 天（等待选择）")
             except Exception as exc:
                 if "不存在" not in str(exc):
                     print(f"  [警告] 自动存档恢复失败：{exc}")
@@ -70,6 +75,7 @@ class Session:
             g.speed = self.default_speed
             g.paused = (self.default_speed == 0)
             self.game = g
+            self.boot_choice = None
             self._last = time.time()
             self._last_autosave = time.time()
             return {"ok": True, "goals": g.goals_snapshot()}
@@ -101,7 +107,19 @@ class Session:
 
     def snapshot(self):
         with self.lock:
-            return self.game.snapshot()
+            snap = self.game.snapshot()
+            snap["boot"] = self.boot_choice
+            return snap
+
+    def boot_continue(self):
+        """玩家选择继续上次对局：清掉启动提示，恢复到存档时的暂停状态"""
+        with self.lock:
+            choice = self.boot_choice or {}
+            self.boot_choice = None
+            if not choice.get("was_paused", False):
+                self.game.paused = False
+            self._last = time.time()
+            return {"ok": True, "paused": self.game.paused}
 
     def apply(self, action, args):
         with self.lock:

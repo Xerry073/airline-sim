@@ -77,6 +77,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/control":
             res = self.session.control(body.get("paused"), body.get("speed"))
             return self._send(200, res)
+        if path == "/api/boot_continue":
+            return self._send(200, self.session.boot_continue())
         if path == "/api/new_game":
             try:
                 res = self.session.new_game(str(body.get("mode") or ""))

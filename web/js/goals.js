@@ -1,10 +1,10 @@
 /* 目标模式：模式选择、四目标进度、A–E 结算 */
-async function startNewGame(mode){
+async function startNewGame(mode,skipConfirm){
   if(mode!=="sandbox"&&mode!=="goals") return;
   const routes=((STATE.player&&STATE.player.routes)||[]).length;
   const fleet=((STATE.player&&STATE.player.fleet)||[]).length;
   const progressed=STATE.tick.day>0||routes>0||fleet>1;
-  if(progressed&&!confirm("开始新对局会把当前进度重置为第 0 天，确定继续？")) return;
+  if(progressed&&!skipConfirm&&!confirm("开始新对局会把当前进度重置为第 0 天，确定继续？")) return;
   const res=await api("/api/new_game",{mode});
   if(!res.ok) return;
   SEEN_SETTLE=null;

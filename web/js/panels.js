@@ -58,7 +58,8 @@ function renderOp(){
   if(!OP.mode) return;
   const titles={new:"开航线",route:"航线管理",fleet:"机队管理",hub:"枢纽设置",
     loan:"贷款",company:"公司名称",help:"教程 / 高级指令",dashboard:"航线数据看板",
-    public:"航线详情",airport:"机场详情",saves:"存档 / 读档",goals:"模式 / 目标"};
+    public:"航线详情",airport:"机场详情",saves:"存档 / 读档",goals:"模式 / 目标",
+    boot:"开始游戏"};
   $("#optitle").textContent=titles[OP.mode]||"运营操作";
   if(OP.mode==="new") renderNewRouteOp();
   else if(OP.mode==="route") renderRouteOp();
@@ -70,6 +71,7 @@ function renderOp(){
   else if(OP.mode==="dashboard") renderDashboardOp();
   else if(OP.mode==="public") renderPublicRouteOp();
   else if(OP.mode==="airport") renderAirportOp();
+  else if(OP.mode==="boot") renderBootOp();
   else if(OP.mode==="saves") renderSavesOp();
   else if(OP.mode==="goals") renderGoalsOp();
 }
@@ -349,6 +351,36 @@ async function closeRouteConfirm(id){
   if(!confirm(`确认关闭 #${r.id} ${r.segments.join("＝")}？`)) return;
   const res=await api("/api/command",{action:"close_route",args:{route_id:r.id}});
   if(res.ok){ toast("航线已关闭"); await refresh(); }
+}
+
+/* ---------- 启动选择：继续上次对局 / 开新对局 ---------- */
+function renderBootOp(){
+  const b=(STATE&&STATE.boot)||{};
+  const day=Number(b.day)||0;
+  $("#opbody").innerHTML=`
+    <div class="marketbox">
+      <div class="sectionline"><span>检测到自动存档</span><span>第 ${day} 天</span></div>
+      <div class="hintline">${b.was_paused?"上次退出时处于暂停状态":"上次退出时正在运行"}；
+        后端已暂停，等你选择。</div>
+    </div>
+    <div class="btnrow" style="flex-wrap:wrap;gap:6px">
+      <button class="primary" id="boot_go" style="flex:1 1 100%">继续上次对局（第 ${day} 天）</button>
+      <button id="boot_sandbox" style="flex:1">开新对局 · 沙盒</button>
+      <button id="boot_goals" style="flex:1">开新对局 · 目标</button>
+      <button id="boot_saves" style="flex:1 1 100%">载入其他存档…</button>
+    </div>
+    <div class="hintline">开新对局不会删除旧存档，之后仍可在「存档」面板里载入。</div>`;
+  const go=$("#boot_go");
+  if(go) go.onclick=async()=>{
+    await api("/api/boot_continue",{});
+    closeOp(); await refresh();
+  };
+  const sb=$("#boot_sandbox");
+  if(sb) sb.onclick=async()=>{ await startNewGame("sandbox",true); closeOp(); };
+  const gl=$("#boot_goals");
+  if(gl) gl.onclick=async()=>{ await startNewGame("goals",true); closeOp(); };
+  const sv=$("#boot_saves");
+  if(sv) sv.onclick=()=>{ closeOp(); openOp("saves"); };
 }
 
 /* ---------- 机场详情（左键点机场） ---------- */
