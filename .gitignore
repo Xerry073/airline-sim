@@ -1,0 +1,24 @@
+# 运行时存档（个人对局数据，不入库）
+saves/*.json
+saves/*.tmp
+
+# 发布产物：用 GitHub Releases 分发 zip，源码本身已在 git 里
+release/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 前端临时检查文件（tools/*.md 里提到的手工 node --check 用）
+check.js
+
+# 内部交接记录（常含本机绝对路径与用户名，不入库）
+交接-*.md
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini

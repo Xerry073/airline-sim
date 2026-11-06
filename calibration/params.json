@@ -1,0 +1,104 @@
+{
+  "meta": {
+    "title": "航空公司模拟经营 Ver1.0 系数表（能级制需求模型）",
+    "version": "1.1.0-cal",
+    "anchor_count": 20,
+    "airport_count": 63,
+    "city_count": 59,
+    "fit_r2_log": 0.8689,
+    "fit_mre_pct": 23.74,
+    "notes": "D_total 为总出行需求（含非航空）；D_air 再由 logit 分配。距离不进入需求，只进入口碑权重。"
+  },
+  "scale": {
+    "label": {
+      "XL": "超大机场",
+      "L": "大型机场",
+      "M": "中型机场",
+      "S": "小型机场",
+      "R": "支线机场"
+    },
+    "threshold_pax_m": {
+      "XL": 80.0,
+      "L": 45.0,
+      "M": 25.0,
+      "S": 10.0,
+      "R": 0.0
+    },
+    "weight": {
+      "XL": 1.0,
+      "L": 0.4624,
+      "M": 0.2138,
+      "S": 0.0989,
+      "R": 0.0457
+    },
+    "formula": "城市能级取该城市全部机场吞吐量之和所对应的档位"
+  },
+  "demand": {
+    "C": 21454.8918,
+    "formula": "D_total = C · w(scale_A) · w(scale_B) · C_region · conn_A · conn_B\nD_air   = D_total · sigmoid(c0(d))",
+    "cabin_split": {
+      "business_base": 0.04,
+      "business_per_tier": 0.01,
+      "business_per_km": 4e-05,
+      "business_cap": 0.3,
+      "first_requires_tier_sum": 7,
+      "first_min_km": 4000,
+      "first_cap": 0.04
+    }
+  },
+  "region_factor": {
+    "CN-CN": 1.0,
+    "CN-GCR": 0.5356,
+    "CN-ASIA": 0.1813,
+    "CN-AMR": 0.0854,
+    "CN-EUR": 0.0586,
+    "CN-OCE": 0.1461,
+    "CN-MEA": 0.0469
+  },
+  "mode_share": {
+    "c0_short": -1.1186,
+    "c0_long": 2.4423,
+    "ramp_start_km": 600.0,
+    "ramp_width_km": 1800.0,
+    "formula": "c0(d) = c0_short + (c0_long - c0_short) · clamp((d-600)/1800, 0, 1)"
+  },
+  "reputation": {
+    "c_rep_short": 0.25,
+    "c_rep_per_km": 7.5e-05,
+    "c_rep_cap": 1.2,
+    "formula": "c_rep(d) = min(c_rep_cap, c_rep_short + c_rep_per_km · d)"
+  },
+  "connectivity": {
+    "k": 0.5,
+    "n_ref": 100.0,
+    "cap": 1.8,
+    "formula": "conn(i) = min(cap, 1 + k · ln(1 + routes_i / n_ref))",
+    "note": "未校准。routes_i 为该机场全部在营航段数（含所有公司、含经停段）。"
+  },
+  "price": {
+    "a": 3.7042,
+    "b": 0.7995,
+    "formula": "P_ref(d) = a * d^b  (经济舱，人民币元)",
+    "cabin_multiplier": {
+      "economy": 1.0,
+      "business": 2.6,
+      "first": 4.5
+    },
+    "floor_vs_marginal_cost": 0.6
+  },
+  "utility": {
+    "c_price": 2.182,
+    "c_time": 0.25,
+    "c_freq": 0.55,
+    "c_hub": 0.15,
+    "c_stop": 0.335,
+    "c_trans": 1.2,
+    "c_rep_note": "c_rep 不再为常数，改由 reputation.c_rep(d) 计算"
+  },
+  "targets": {
+    "elasticity_at_share_0_45": -1.2,
+    "transfer_overtake_daily_connections": 10,
+    "solo_share_short_haul": 0.45,
+    "solo_share_long_haul": 0.92
+  }
+}

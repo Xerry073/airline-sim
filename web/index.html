@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>航空公司模拟经营</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>航空模拟</h1>
+    <span class="clock" id="clock">第 0 天</span>
+    <span class="tag" id="rank">—</span>
+    <button id="helpbtn" class="ghost" title="查看教程与高级指令">教程 / 指令</button>
+    <button id="dashbtn" class="ghost" title="按客座率 / 利润率 / 航距 / 机场顺序查看航线">数据看板</button>
+    <button id="goalbtn" class="ghost" title="选择沙盒/目标模式，查看目标进度与结算">目标 / 模式</button>
+    <button id="savebtn" class="ghost" title="保存 / 载入本地对局">存档</button>
+    <div class="spacer"></div>
+    <span class="tag">速度</span>
+    <button data-speed="0">暂停</button>
+    <button data-speed="1">1×</button>
+    <button data-speed="4">4×</button>
+    <button data-speed="16">16×</button>
+  </header>
+
+  <div id="stage">
+    <div id="mapwrap">
+      <svg id="map" viewBox="0 24 1000 712" preserveAspectRatio="xMidYMid meet">
+        <g id="world">
+          <g id="graticule"></g>
+          <g id="land"></g>
+          <g id="rivalroutes"></g>
+          <g id="routelayer"></g>
+          <g id="leaders"></g>
+          <g id="aps"></g>
+        </g>
+        <g id="labels"></g>
+      </svg>
+      <div id="mapctl">
+        <button data-view="region" class="on">中国 / 东亚</button>
+        <button data-view="world">全球</button>
+        <button data-view="network">我的网络</button>
+        <button id="aitoggle" title="显示 / 隐藏 AI 航线">AI 航线：关</button>
+      </div>
+      <div id="aptip"></div>
+      <div id="wiz"></div>
+      <div id="maplegend">
+        <span><i class="l1"></i>我的航线</span>
+        <span><i class="l2"></i>AI 航线</span>
+        <span><i class="l3"></i>竞争航线</span>
+        <span>线宽 = 客座率</span>
+      </div>
+      <div id="mapnote">点击机场开线 · 滚轮缩放 · 拖拽平移 · 同城机场点开拆分</div>
+    </div>
+
+    <aside id="side">
+      <div class="pane">
+        <h2><span>我的公司</span><span class="tag" id="pname">—</span></h2>
+        <div class="body"><div class="kpis" id="kpis"></div></div>
+      </div>
+      <div class="pane" style="flex:1 1 auto">
+        <h2><span>航线</span><span class="tag" id="routecount">0</span></h2>
+        <div class="body"><table><tbody id="routes"></tbody></table></div>
+      </div>
+      <div class="pane" style="flex:0 1 210px">
+        <h2><span>竞争对手</span><span class="tag" id="rivalcount">0</span></h2>
+        <div class="body"><table><tbody id="rivals"></tbody></table></div>
+      </div>
+    </aside>
+  </div>
+
+  <div id="foot">
+    <div id="actionbar">
+      <button class="primary" data-op="new">开航线</button>
+      <button data-op="route">航线管理</button>
+      <button data-op="fleet">机队</button>
+      <button data-op="hub">设枢纽</button>
+      <button data-op="loan">贷款</button>
+      <button data-op="company">改名</button>
+    </div>
+    <div id="log">就绪</div>
+    <button id="advbtn" class="ghost">高级指令</button>
+  </div>
+  <div id="cmdbar">
+    <input id="cmd" placeholder="open PEK SHA 1 A320 ｜ price 3 1.15 ｜ lease B789 PEK ｜ sell 2 ｜ loan 500 ｜ rename 云翼航空">
+    <button id="run">执行</button>
+  </div>
+</div>
+
+<div id="opmodal" aria-hidden="true">
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="optitle">
+    <div class="dhead"><h3 id="optitle">运营操作</h3><button id="opclose" class="xbtn" aria-label="关闭">✕</button></div>
+    <div class="dbody" id="opbody"></div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script src="js/map.js"></script>
+<script src="js/routes.js"></script>
+<script src="js/interaction.js"></script>
+<script src="js/panels.js"></script>
+<script src="js/saves.js"></script>
+<script src="js/goals.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
