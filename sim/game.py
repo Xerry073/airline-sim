@@ -754,7 +754,11 @@ class Game:
         out["opponent_routes"] = [
             {"airline": a.name, "hub": a.hubs[0] if a.hubs else None,
              "segments": list(r.segments), "daily_flights": r.daily_flights,
-             "ac_type": r.ac_type, "lf": round(r.lf_ewma, 3)}
+             "ac_type": r.ac_type, "lf": round(r.lf_ewma, 3),
+             # 公开票价（R-632 / UI 信息边界）：只给价格指数与各 OD 票价，
+             # 不暴露成本、收入与利润
+             "price_index": round(r.price_index, 4),
+             "prices": r.public_fares()}
             for a in alive if not a.is_player
             for r in a.routes
         ]
@@ -771,6 +775,8 @@ class Game:
                     {"id": r.rid, "segments": list(r.segments),
                      "daily_flights": r.daily_flights, "ac_type": r.ac_type,
                      "price_index": r.price_index, "lf": r.lf_ewma,
+                     # 与对手侧同一口径的 OD 票价，供「竞争者」卡片并排比价
+                     "prices": r.public_fares(),
                      "rep": r.rep, "pax": getattr(r, "last_pax", 0.0),
                      "distance_km": round(getattr(r, "last_distance_km", r.total_km()), 0),
                      "revenue_M": round(getattr(r, "last_revenue", 0.0), 4),

@@ -8,7 +8,7 @@ async function startNewGame(mode){
   const res=await api("/api/new_game",{mode});
   if(!res.ok) return;
   SEEN_SETTLE=null;
-  sel=[]; expandedCity=null; closeWizard();
+  sel=[]; stopover=null; expandedCity=null; closeWizard();
   closeOp();
   await refresh();
   toast(mode==="goals"?"目标模式已开始：10 年内追踪四个目标":"沙盒模式已开始");

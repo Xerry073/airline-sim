@@ -379,6 +379,14 @@ def main():
     check("UI-02", "航线利润率与收入/成本一致",
           route and abs(route["margin"] - route["profit_M"] / route["revenue_M"]) < 0.002,
           str(route.get("margin")))
+    check("UI-02", "玩家航线带 OD 票价，口径与对手一致（R-632）",
+          route.get("prices") and any(
+              abs(p["eco"] - round(g2.world.p_ref(
+                      g2.world.dist(g2.world.airports[p["from"]]["city"],
+                                    g2.world.airports[p["to"]]["city"]), "eco")
+                  * route["price_index"])) <= max(2, p["eco"] * 0.001)
+              and p["biz"] > p["eco"] for p in route["prices"]),
+          str(route.get("prices")))
 
     # ---------- AI 公开航线网络 ----------
     g3 = S.Game(n_ai=3, with_player=True, seed=11)
@@ -390,8 +398,19 @@ def main():
           len(opp) > 0 and all(
               {"airline", "segments", "daily_flights", "ac_type", "lf"} <= set(r)
               for r in opp), f"{len(opp)} 条")
-    check("UI-03", "AI 航线快照不泄露票价与财务",
-          all("price" not in r and "cost" not in r and "profit" not in r for r in opp))
+    check("UI-03", "AI 航线公开价格指数与各 OD 票价",
+          all("price_index" in r and r["prices"] for r in opp),
+          f"{sum(len(r.get('prices') or []) for r in opp)} 个 OD")
+    check("UI-03", "公开票价 = 参考价 × 价格指数（R-632）",
+          all(abs(p["eco"] - round(g3.world.p_ref(
+                  g3.world.dist(g3.world.airports[p["from"]]["city"],
+                                g3.world.airports[p["to"]]["city"]), "eco") * r["price_index"]))
+              <= max(2, p["eco"] * 0.001)
+              and p["biz"] > p["eco"]
+              for r in opp for p in r["prices"]))
+    check("UI-03", "AI 航线快照仍不泄露成本、收入与利润",
+          all(not ({"cost", "cost_M", "revenue", "revenue_M", "profit", "profit_M",
+                    "margin"} & set(r)) for r in opp))
 
     # ---------- 侧栏「竞争对手」口径（FR-1002） ----------
     g5 = S.Game(n_ai=30, with_player=True, seed=31)

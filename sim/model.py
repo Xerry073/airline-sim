@@ -202,6 +202,27 @@ class Route:
         return sum(self.airline.world.airport_dist(self.segments[k], self.segments[k + 1])
                    for k in range(i, j + 1))
 
+    def public_fares(self):
+        """对外的公开票价（R-632）：每个 OD 按 参考价(两端直线距离, 舱位) × 价格指数。
+
+        只给票价，不给成本与收入；经济/商务两舱，与玩家侧调价口径一致。
+        """
+        w = self.airline.world
+        out = []
+        for i in range(self.n_segments):
+            for j in range(i + 1, self.n_segments + 1):
+                a, b = self.segments[i], self.segments[j]
+                ca, cb = w.airports[a]["city"], w.airports[b]["city"]
+                if ca == cb:
+                    continue
+                d = w.dist(ca, cb)
+                out.append({
+                    "from": a, "to": b,
+                    "eco": round(w.p_ref(d, "eco") * self.price_index),
+                    "biz": round(w.p_ref(d, "biz") * self.price_index),
+                })
+        return out
+
 
 class Airline:
     def __init__(self, name, world, cash, hub, is_player=False):
