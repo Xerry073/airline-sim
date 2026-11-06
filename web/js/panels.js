@@ -162,11 +162,33 @@ function renderRouteOp(){
   if(!routes.some(r=>r.id===OP.routeId)) OP.routeId=routes[0].id;
   const r=routes.find(x=>x.id===OP.routeId);
   const opts=routes.map(x=>`<option value="${x.id}"${x.id===r.id?" selected":""}>#${x.id} ${x.segments.join("→")}</option>`).join("");
+  const myMarkets=routeMarketSet([r],AP);
   const contested=routeIsContested(r.segments||[],
     routeMarketSet((STATE&&STATE.opponent_routes)||[],AP),AP);
   const fmtM=v=>{const n=Number(v)||0;return (n<0?"-":"")+`¥${Math.abs(n).toFixed(2)}M`;};
   const marginVal=r.margin==null?"—":(r.margin*100).toFixed(1)+"%";
   const marginCls=r.margin==null?"":r.margin>0?"pos":r.margin<0?"neg":"";
+
+  /* 共享同一市场、在抢同一条 OD 的对手航线（公开口径：班次 / 载客率 / 价格指数） */
+  const rivals=((STATE&&STATE.opponent_routes)||[])
+    .filter(o=>routeIsContested(o.segments||[],myMarkets,AP))
+    .sort((a,b)=>(b.daily_flights||0)-(a.daily_flights||0)||(b.lf||0)-(a.lf||0));
+  const shown=rivals.slice(0,10);
+  const myIdx=Number(r.price_index)||1;
+  const rivalRows=shown.map(o=>{
+    const lf=Number.isFinite(Number(o.lf))?(Number(o.lf)*100).toFixed(0)+"%":"—";
+    const idx=Number(o.price_index);
+    let gapTag="";
+    if(Number.isFinite(idx)&&idx>0){
+      const gap=(idx/myIdx-1)*100;
+      if(Math.abs(gap)>=1)
+        gapTag=`<div class="hintline" style="margin:-2px 0 6px">价格指数 ${idx<myIdx?"比你低":"比你高"} ${Math.abs(gap).toFixed(0)}%（你的 ${myIdx.toFixed(2)}）</div>`;
+    }
+    return `<div class="req">
+        <span>${escHTML(o.airline||"AI")} · ${escHTML((o.segments||[]).join(" → "))}</span>
+        <b>${o.daily_flights||"—"} 班 · LF ${lf} · 指数 ${Number.isFinite(idx)?idx.toFixed(2):"—"}</b>
+      </div>${gapTag}`;
+  }).join("");
   $("#opbody").innerHTML=`
     <div class="field"><label>选择航线</label><select id="rsel">${opts}</select></div>
     <div class="marketbox">
@@ -178,13 +200,19 @@ function renderRouteOp(){
         <span>载客率 <b>${(r.lf*100).toFixed(0)}%</b></span>
         <span>日客流 <b>${Math.round(r.pax||0).toLocaleString()}</b></span>
         <span>航距 <b>${Math.round(r.distance_km||0).toLocaleString()} km</b></span>
-        <span>竞争 <b class="${contested?"warn":""}">${contested?"有 AI 共享市场":"暂无重叠"}</b></span>
+        <span>竞争 <b class="${contested?"warn":""}">${contested?`有 AI 共享市场（${rivals.length} 条）`:"暂无重叠"}</b></span>
         <span>日收入 <b>${fmtM(r.revenue_M)}</b></span>
         <span>日成本 <b>${fmtM(r.cost_M)}</b></span>
         <span>利润率 <b class="${marginCls}">${marginVal}</b></span>
         <span>日利润 <b>${fmtM(r.profit_M)}</b></span>
       </div>
       <div class="hintline" style="margin-top:6px">利润率为航线可归集口径，不含折旧租赁与总部固定费用。</div>
+    </div>
+    <div class="opcard">
+      <h4>竞争者 <span>${contested?`${rivals.length} 条共享市场`:"暂无"}</span></h4>
+      ${rivalRows||'<div class="empty">这条航线目前没有 AI 在飞同一个市场。</div>'}
+      ${rivals.length>shown.length?`<div class="hintline">另有 ${rivals.length-shown.length} 条未显示（按班次排序取前 10）。</div>`:""}
+      <div class="hintline">对手数据为公开口径：班次 / 载客率 / 价格指数；成本与财务不可见。</div>
     </div>
     <div class="opcard">
       <h4>调价 <span>价格指数 0.50–1.50，1.00 = 参考票价</span></h4>

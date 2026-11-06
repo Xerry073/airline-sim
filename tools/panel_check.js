@@ -151,5 +151,72 @@ const aiRoute = {
     "AI 航线详情文案：票价公开、成本与财务不公开");
 }
 
+/* ---------- 我的航线：竞争者一览 ---------- */
+const mapSrc = fs.readFileSync(path.join(root, "web", "js", "map.js"), "utf8");
+const mkStart = mapSrc.indexOf("function routeMarketKeys");
+const mkEnd = mapSrc.indexOf("function lodRank", mkStart);
+if (mkStart < 0 || mkEnd < 0) {
+  console.error("找不到 routeMarketKeys/routeMarketSet 代码段");
+  process.exit(1);
+}
+const mkBlock = mapSrc.slice(mkStart, mkEnd);
+const { routeMarketSet, routeIsContested } =
+  new Function(mkBlock + "\n; return {routeMarketSet, routeIsContested};")();
+
+const routeStart = panelsSrc.indexOf("function renderRouteOp");
+const routeEnd = panelsSrc.indexOf("async function closeRouteConfirm", routeStart);
+if (routeStart < 0 || routeEnd < 0) {
+  console.error("找不到 renderRouteOp 代码段");
+  process.exit(1);
+}
+const routeBlock = panelsSrc.slice(routeStart, routeEnd);
+
+const APX = {
+  PEK: { city: "北京" }, SHA: { city: "上海" }, PVG: { city: "上海" },
+  CTU: { city: "成都" }, KMG: { city: "昆明" },
+};
+
+function renderMine(playerRoutes, opponentRoutes) {
+  const nodes = new Map();
+  const nodeFor = sel => {
+    if (!nodes.has(sel)) nodes.set(sel, { textContent: "", innerHTML: "" });
+    return nodes.get(sel);
+  };
+  const fn = new Function("$", "escHTML", "STATE", "OP", "AP",
+    "routeMarketSet", "routeIsContested",
+    routeBlock + "\n; return renderRouteOp;");
+  const STATE = { player: { routes: playerRoutes }, opponent_routes: opponentRoutes };
+  const render = fn(nodeFor, escHTML, STATE, { routeId: playerRoutes[0].id }, APX,
+    routeMarketSet, routeIsContested);
+  render();
+  return nodeFor("#opbody").innerHTML;
+}
+
+const mine = {
+  id: 1, segments: ["PEK", "SHA"], ac_type: "A320", daily_flights: 2,
+  price_index: 1.2, lf: 0.9, pax: 300, distance_km: 1091,
+  revenue_M: 1.2, cost_M: 0.9, profit_M: 0.3, margin: 0.25,
+};
+
+// 8) 竞争航线列出对手的班次 / 载客率 / 价格指数，并标出价差方向
+{
+  const html = renderMine([mine], [
+    { airline: "AI-07", segments: ["PEK", "SHA"], daily_flights: 4, lf: 0.88, price_index: 0.92 },
+    { airline: "AI-09", segments: ["SHA", "PEK"], daily_flights: 2, lf: 0.5, price_index: 1.45 },
+    { airline: "AI-01", segments: ["PEK", "CTU"], daily_flights: 1, lf: 0.7, price_index: 0.6 },
+  ]);
+  check(/AI-07/.test(html) && /4 班 · LF 88% · 指数 0\.92/.test(html)
+    && /AI-09/.test(html) && /比你低 23%/.test(html) && /比你高 21%/.test(html),
+    "竞争航线显示对手班次/载客率/价格指数与价差", html.replace(/\s+/g, " ").slice(0, 200));
+  check(!/AI-01/.test(html), "不相关市场的对手不出现在竞争列表");
+}
+
+// 9) 没有竞争时给出占位，而不是空白
+{
+  const html = renderMine([mine], []);
+  check(/没有 AI 在飞同一个市场/.test(html) && /暂无重叠/.test(html),
+    "无竞争时给出占位文案与「暂无重叠」");
+}
+
 console.log("\n" + (failed ? "FAILED" : "OK") + "  " + passed + " passed, " + failed + " failed");
 process.exit(failed ? 1 : 0);

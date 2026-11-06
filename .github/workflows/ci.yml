@@ -35,7 +35,7 @@ jobs:
       - name: 目标模式校验（8 条）
         run: node tools/goal_check.js
 
-      - name: 面板与 AI 票价校验（7 条）
+      - name: 面板与 AI 票价校验（10 条）
         run: node tools/panel_check.js
 
       - name: 开线手势校验（10 条）
