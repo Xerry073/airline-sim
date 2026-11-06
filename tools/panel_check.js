@@ -330,6 +330,22 @@ const mine = {
     "机队面板对租赁机显示退租与押金，而不是出售价");
 }
 
+// 15b) 航线主 OD 票价：经停航线取首→末，不取第一段
+{
+  const appSrc = fs.readFileSync(path.join(root, "web", "js", "app.js"), "utf8");
+  const s = appSrc.indexOf("function routeFareEco");
+  const e = appSrc.indexOf("/* 机队利用汇总", s);
+  if (s < 0 || e < 0) { console.error("找不到 routeFareEco"); process.exit(1); }
+  const fn = new Function(appSrc.slice(s, e) + "\n; return routeFareEco;")();
+  const stop = { segments: ["PEK", "XIY", "KMG"],
+    prices: [{ from: "PEK", to: "XIY", eco: 700, biz: 1800 },
+             { from: "PEK", to: "KMG", eco: 1190, biz: 3094 },
+             { from: "XIY", to: "KMG", eco: 600, biz: 1500 }] };
+  check(fn(stop) === 1190, "经停航线取「首→末」主 OD 的经济舱票价",
+    String(fn(stop)));
+  check(fn({ segments: ["PEK", "SHA"] }) === null, "缺 prices 时返回 null（旧后端兼容）");
+}
+
 // 16) 机队利用汇总：总体百分比 + 各机型小字（新机型 0% 也要显示）
 {
   const appSrc = fs.readFileSync(path.join(root, "web", "js", "app.js"), "utf8");

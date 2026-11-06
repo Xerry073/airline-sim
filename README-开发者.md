@@ -220,12 +220,12 @@ python sim/selftest.py          # 67 条内核验收（FR 编号对齐需求文�
 node tools/asset_check.js       #  5 条：前端资源引用、加载顺序、语法、重名、顶层语句
 node tools/map_check.js         # 31 条：地图几何、分级、标签避让、大圆、日界线、开线焦点
 node tools/goal_check.js        #  8 条：目标/模式面板与 /api/new_game 开局
-node tools/panel_check.js       # 21 条：对手榜（含玩家高亮）、AI 票价、竞争对照、换机型、固定开销、调机、退租、机场详情、机队利用
+node tools/panel_check.js       # 23 条：对手榜（含玩家高亮）、AI 票价、竞争对照、换机型、固定开销、调机、退租、机场详情、机队利用、航线票价列
 node tools/route_gui_check.js   # 10 条：开线手势（右键起点 / 左键终点 / Alt+左键经停）
 python -m compileall -q server sim calibration
 ```
 
-当前记录：`67/67`、`5/5`、`31/31`、`8/8`、`21/21`、`10/10`，`compileall` 退出码 0。
+当前记录：`67/67`、`5/5`、`31/31`、`8/8`、`23/23`、`10/10`，`compileall` 退出码 0。
 
 ### 前端测试怎么工作
 

@@ -125,6 +125,13 @@
   button.danger{border-color:#63353d;color:#ff9a9a;background:#21161a}
   button.danger:hover{border-color:var(--bad);color:#fff}
   button.mini{padding:1px 6px;font-size:10px;border-radius:4px}
+  #routes th{font-size:10px;padding:3px 4px;text-align:right}
+  #routes th:first-child{text-align:left}
+  #routes td{padding:3px 4px;font-size:10.5px;text-align:right;white-space:nowrap}
+  #routes td.seg{text-align:left;font-variant-numeric:normal}
+  #routes td.ac{color:var(--dim)}
+  #routes .bar{min-width:26px}
+  #routes tr.rhead th{position:static}
   .rrow{cursor:pointer}
   .rrow:hover td{background:#172331}
 

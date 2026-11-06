@@ -226,13 +226,19 @@ function render(){
         <div class="v ${usageCls}">${usage.pct}%</div>
         <div class="sub">${usage.text}</div></div>`;
     $("#routecount").textContent=p.routes.length;
-    $("#routes").innerHTML=p.routes.map(r=>`
-      <tr class="rrow" onclick="openOp('route',${r.id})" title="点击调整价格 / 班次">
-      <td>${r.segments.join("→")}</td><td>${r.daily_flights}</td>
-      <td>${r.price_index.toFixed(2)}</td>
-      <td><div class="bar"><i style="width:${Math.min(1,r.lf)*100}%"></i></div></td>
-      <td><span class="x" onclick="event.stopPropagation();closeRouteConfirm(${r.id})">✕</span></td></tr>`).join("")
-      ||'<tr><td style="color:#78899c">点「开航线」或在地图上选两个机场</td></tr>';
+    const rhead=`<tr class="rhead"><th>航线</th><th>班次</th><th>机型</th><th>票价</th><th>客座</th><th></th></tr>`;
+    $("#routes").innerHTML=rhead+(p.routes.map(r=>{
+      const fare=routeFareEco(r);
+      const lf=Math.round(Math.min(1,Number(r.lf)||0)*100);
+      return `<tr class="rrow" onclick="openOp('route',${r.id})"
+          title="${r.segments.join("→")} · 价格指数 ${Number(r.price_index).toFixed(2)} · 客座率 ${lf}% · 点击调整价格/班次/机型">
+        <td class="seg">${r.segments.join("→")}</td>
+        <td>${r.daily_flights}</td>
+        <td class="ac">${escHTML(r.ac_type)}</td>
+        <td>${fare!=null?"¥"+fare.toLocaleString("zh-CN"):"—"}</td>
+        <td><div class="bar" title="客座率 ${lf}%"><i style="width:${lf}%"></i></div></td>
+        <td><span class="x" onclick="event.stopPropagation();closeRouteConfirm(${r.id})">✕</span></td></tr>`;
+    }).join("")||'<tr><td colspan="6" style="color:#78899c">点「开航线」或在地图上选两个机场</td></tr>');
   }
   renderRivals(s);
 
@@ -294,6 +300,16 @@ async function cmd(text){
   if(!map[op]){ toast("未知指令 "+op,true); return; }
   const res=await api("/api/command",map[op]());
   if(res.ok){ toast("已执行"); refresh(); }
+}
+
+/* 航线主 OD（首→末）的经济舱票价；没有 prices 时返回 null（旧后端兼容） */
+function routeFareEco(r){
+  const segs=(r&&r.segments)||[];
+  if(segs.length<2) return null;
+  const list=(r&&r.prices)||[];
+  const main=list.find(p=>p.from===segs[0]&&p.to===segs[segs.length-1])||list[0];
+  const v=main&&Number(main.eco);
+  return Number.isFinite(v)?v:null;
 }
 
 /* 机队利用汇总：按机型列利用率，并给出最紧张的一档（供 KPI 与测试使用） */

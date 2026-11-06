@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-11-07 · 交互轮：侧栏航线表补上机型与票价
+
+反馈：侧栏「航线」只有 航段 / 班次 / 价格指数 / 进度条，看不出这条线用什么机型飞、票价多少；
+进度条也没标注是客座率。
+
+### 变更
+
+- **航线表改成五列**（`web/js/app.js`、`web/css/app.css`）
+  - 表头：`航线 / 班次 / 机型 / 票价 / 客座`（✕ 关线保持在最后一列）
+  - **票价**取该航线主 OD（首站→末站）的**经济舱**票价，经停航线不会误取第一段
+  - 价格指数从列里移到行的悬停提示（`PEK→SHA · 价格指数 0.97 · 客座率 87%`）
+  - 进度条加 `title="客座率 87%"`，并收窄以给新列腾空间
+- **纯函数 `routeFareEco(r)`**：主 OD 票价取值（旧后端缺 `prices` 时返回 null，显示 —）
+
+### 测试
+
+- `tools/panel_check.js` 21 → **23**：经停航线取首→末主 OD、缺 prices 返回 null
+
+```text
+python sim/selftest.py        -> 67 / 67
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 31 / 31
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     -> 23 / 23
+node tools/route_gui_check.js -> 10 / 10
+```
+
+---
+
 ## 2026-11-07 · 信息轮：加「总资产」，对手榜把玩家高亮进去
 
 反馈：想和对手比资产，但「我的公司」只有现金和负债；对手榜里又完全看不到自己。
