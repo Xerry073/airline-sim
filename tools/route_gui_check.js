@@ -38,6 +38,7 @@ function makeHarness() {
   let wizOpen = false;
   const fn = new Function(
     "AP", "STATE", "toast", "$", "renderMarkers", "drawLabels", "openWizard", "hideTip",
+    "applyRouteFocus", "SHOW_AI",
     "let sel=[], stopover=null, expandedCity=null, hoverId=null;\n"
     + block
     + "\nreturn {pick, clearSelection, sel:()=>sel.slice(), stopover:()=>stopover};"
@@ -48,7 +49,7 @@ function makeHarness() {
     () => ({ classList: { contains: () => wizOpen, remove: () => { wizOpen = false; } } }),
     () => {}, () => {},
     segs => { opened.push(segs); },
-    () => {}
+    () => {}, () => {}, false
   );
   return { api, opened, toasts, isWizOpen: () => wizOpen, openWiz: () => { wizOpen = true; } };
 }

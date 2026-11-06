@@ -29,7 +29,7 @@ jobs:
       - name: 前端资源引用检查
         run: node tools/asset_check.js
 
-      - name: 地图几何校验（28 条）
+      - name: 地图几何校验（31 条）
         run: node tools/map_check.js
 
       - name: 目标模式校验（8 条）

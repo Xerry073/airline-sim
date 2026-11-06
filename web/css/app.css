@@ -60,6 +60,14 @@
   #rivalroutes .rrgroup:hover .rrpath{stroke:#e2ebf4;stroke-opacity:.9}
   #rivalroutes .rrhit{fill:none;stroke:transparent;pointer-events:stroke;vector-effect:non-scaling-stroke}
 
+  /* 开线选中起点：只强调经过该机场的航线，其余压暗 */
+  #routelayer .rgroup.focus .rmain{stroke-opacity:1}
+  #routelayer .rgroup.focus .rglow{stroke-opacity:.30}
+  #rivalroutes .rrgroup.focus .rrpath{stroke:#cfdae5;stroke-opacity:.85}
+  #rivalroutes .rrgroup.focus.contested .rrpath{stroke:#ffd76a;stroke-opacity:.9}
+  #routelayer .rgroup.dim,
+  #rivalroutes .rrgroup.dim{opacity:.12}
+
   #labels{pointer-events:none}
   #labels text{font:600 11px -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
                fill:#9fb3c8;paint-order:stroke;stroke:#071018;stroke-width:3px;

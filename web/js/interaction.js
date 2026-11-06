@@ -105,8 +105,15 @@ function pickOrigin(iata){
   if($("#wiz").classList.contains("on")) closeWizard();
   sel=[iata]; stopover=null;
   if((STATE.airports||[]).filter(x=>x.city===a.city).length>1) expandedCity=a.city;
-  toast(`${iata} 已设为起点 · 左键点终点 · Alt+左键加经停`);
-  renderMarkers(); drawLabels();
+  const mine=((STATE.player&&STATE.player.routes)||[])
+    .filter(x=>(x.segments||[]).includes(iata)).length;
+  const ai=(((STATE&&STATE.opponent_routes)||[]))
+    .filter(x=>(x.segments||[]).includes(iata)).length;
+  let msg=`${iata} 已设为起点 · 左键点终点 · Alt+左键加经停`;
+  if(mine) msg+=` · 我的 ${mine} 条`;
+  if(ai) msg+=SHOW_AI?` · AI ${ai} 条`:` · AI ${ai} 条（开关未开）`;
+  toast(msg);
+  renderMarkers(); drawLabels(); applyRouteFocus();
 }
 
 function pickStopover(iata){
@@ -115,10 +122,11 @@ function pickStopover(iata){
   if(iata===origin){ toast("经停点不能与起点相同",true); return; }
   if(AP[origin]&&AP[origin].city===a.city){ toast("同城机场不能互相经停",true); return; }
   stopover = stopover===iata ? null : iata;
-  if(!stopover){ toast("已取消经停点"); renderMarkers(); drawLabels(); return; }
+  if(!stopover){ toast("已取消经停点"); renderMarkers(); drawLabels(); applyRouteFocus(); return; }
   toast(`经停点 ${stopover} · 再 Alt+左键一次取消`);
   if(sel.length===2) openWizard(routeSegments(sel[0],stopover,sel[1]));
   else { renderMarkers(); drawLabels(); }
+  applyRouteFocus();
 }
 
 function pickDestination(iata){
@@ -129,7 +137,7 @@ function pickDestination(iata){
   if(stopover===iata) stopover=null;
   sel=[origin,iata];
   openWizard(routeSegments(origin,stopover,iata));
-  renderMarkers(); drawLabels();
+  renderMarkers(); drawLabels(); applyRouteFocus();
 }
 
 function routeSegments(origin,stop,dest){
@@ -139,7 +147,7 @@ function routeSegments(origin,stop,dest){
 function clearSelection(){
   sel=[]; stopover=null; expandedCity=null; hoverId=null;
   closeWizard(); hideTip();
-  renderMarkers(); drawLabels();
+  renderMarkers(); drawLabels(); applyRouteFocus();
 }
 
 function closeWizard(){ $("#wiz").classList.remove("on"); }

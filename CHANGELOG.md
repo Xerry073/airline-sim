@@ -4,6 +4,41 @@
 
 ---
 
+## 2026-11-06 · 交互轮：选中起点后聚焦该机场已连通的航线
+
+目的：右键选完起点，玩家最想知道的是「这个机场已经连通了哪里、还有哪些方向空着」。
+原来所有航线一律同亮度，AI 航线还会跟自己的航线互相盖住。
+
+### 变更
+
+- **`applyRouteFocus()`**（`web/js/routes.js`）
+  - 只要 `sel`（起点/终点）或经停点非空，就按「航线是否经过这些机场」给每个航线节点打
+    `.focus` / `.dim`
+  - 玩家航线：命中的保持原色并提亮（蓝=我的、黄=竞争），未命中的压到 12% 透明度
+  - AI 航线：开关打开时同样处理（灰=普通、暗黄=竞争），未命中的压到 12%
+  - 在 `syncRoutes()` / `syncRivalRoutes()` 末尾以及每个选择动作后调用，刷新与切换开关都不会丢焦点
+- **纯函数 `routeTouches(segments, codes)`**（`web/js/map.js`，放进 `MAP_MATH` 段便于抽取测试）
+- **选中起点的提示带条数**：`PEK 已设为起点 · 我的 2 条 · AI 5 条`；
+  AI 航线开关没开时提示 `AI 5 条（开关未开）`，不至于让人以为这个机场没人飞
+- **样式**（`web/css/app.css`）：`.focus` 提亮、`.dim` 压暗，过渡 0.2s
+
+### 测试
+
+- `tools/map_check.js` 28 → **31**：`routeTouches` 的方向不敏感、经停点命中、无关机场不命中
+
+```text
+python sim/selftest.py        -> 52 / 52
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 31 / 31
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     -> 13 / 13
+node tools/route_gui_check.js -> 10 / 10
+```
+
+> 焦点只是视觉强调，不改任何数值与判定；AI 航线是否出现仍由左上角「AI 航线」开关决定。
+
+---
+
 ## 2026-11-06 · 信息轮：玩家航线也输出 OD 票价，与对手并排比价
 
 目的：上一轮只显示了对手的价格指数，玩家还得自己换算才比得出「我贵多少」。现在两侧

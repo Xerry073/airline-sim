@@ -124,6 +124,13 @@ function routeIsContested(segments,otherSet,ap){
   return false;
 }
 
+/* 航线是否经过给定机场之一：开线选起点时用来高亮「已连通」的航线 */
+function routeTouches(segments,codes){
+  if(!segments||!segments.length||!codes||!codes.length) return false;
+  for(const c of codes) if(segments.indexOf(c)>=0) return true;
+  return false;
+}
+
 /* 当前缩放最低显示能级：k<2 只显示 L 及以上；k<3 显示 M 及以上；再放大全显示。 */
 function lodRank(k){
   if(k<2) return 4;
