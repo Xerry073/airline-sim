@@ -18,7 +18,7 @@
 后端（server/：api.py 路由 → session.py 会话 → sim/ 内核）
    │
    ▼
-模拟内核（sim/ 10 个分层模块，simulate.py 只是兼容门面）
+模拟内核（sim/ 11 个分层模块，simulate.py 只是兼容门面）
    │
    ▼
 系数与数据（calibration/params.json、airports.csv；sim/aircraft.csv）
@@ -45,6 +45,7 @@
 | `server/supervisor.py` | 监督进程：`app.py` 以退出码 42 退出时用原参数重启 |
 | `sim/simulate.py` | **兼容门面**：re-export 下面所有模块，保持旧 import 与 CLI 用法 |
 | `sim/config.py` | 路径、ECON/COST 系数、目标常量、区域名 |
+| `sim/names.py` | AI 公司名池（40 中文 + 60 英文）、按种子无放回抽取（独立随机数流） |
 | `sim/util.py` | CSV 读取、大圆距离、clamp、sigmoid、`slot_touches` |
 | `sim/model.py` | `World` / `Aircraft` / `Route` / `Airline` |
 | `sim/products.py` | 航线 → 行程产品（直飞/经停/中转、候选上限、去重） |
@@ -218,7 +219,8 @@ boot            启动选择：进程启动并恢复自动存档时为 {day,name
 ## 6. 测试
 
 ```bash
-python sim/selftest.py          # 67 条内核验收（FR 编号对齐需求文档）
+python sim/selftest.py          # 80 条内核验收（FR 编号对齐需求文档）
+python tools/server_check.py    #  8 条后端冒烟：启动、保存并重启（退出码 42）、保存并退出
 node tools/asset_check.js       #  5 条：前端资源引用、加载顺序、语法、重名、顶层语句
 node tools/map_check.js         # 31 条：地图几何、分级、标签避让、大圆、日界线、开线焦点
 node tools/goal_check.js        #  8 条：目标/模式面板与 /api/new_game 开局
@@ -227,7 +229,11 @@ node tools/route_gui_check.js   # 10 条：开线手势（右键起点 / 左键�
 python -m compileall -q server sim calibration
 ```
 
-当前记录：`67/67`、`5/5`、`31/31`、`8/8`、`23/23`、`10/10`，`compileall` 退出码 0。
+当前记录：`80/80`、`8/8`、`5/5`、`31/31`、`8/8`、`23/23`、`10/10`，`compileall` 退出码 0。
+
+`server_check.py` 会真起一个后端进程（不 mock），因为「保存并重启」这类路径只有跑起来才暴露
+——`app.py` 曾经漏了 `import sys`，内核与前端检查全绿，但一点那个按钮就是 NameError。
+它用 `AIRLINE_SIM_SAVES` 把存档目录指到仓库内的临时目录，**不会覆盖 `saves/autosave.json`**。
 
 ### 前端测试怎么工作
 
@@ -283,22 +289,36 @@ python -m compileall -q server sim calibration
 
 重新标定：`python calibration/calibrate.py`（需要 numpy）。
 
+改机型时的两条硬约束：
+
+- `name` 只是显示名，前端全部用 `t.name` 渲染，随便改、刷新即生效；现有取值是型号全称
+  （`A320neo`、`B737-800`、`B777-300ER`…），不带「波音 / 空客」这类厂商词。
+- `code` 是**存档标识**：`ac_type` 写在每一局的 `fleet`/`routes` 里，`from_save()` 会拿它校验，
+  直接改名会让老存档报「存档中的机型不存在」。真要改代码，必须同时改
+  `sim/ai.py`（AI 选型三档）、`web/js/panels.js`（默认机型）、`server/session.py`（按机队估班次）、
+  `sim/game.py`（开局送机），并在 `from_save()` 里加一张「旧代码 → 新代码」映射表。
+- `class` 只能是 `支线 / 窄体 / 宽体`：跑道等级（`runway_allows`）与过站时间
+  （`FLIGHT["turnaround_min"]`）都按它判定。
+
 ---
 
 ## 8. 存档格式
 
-`saves/*.json`，顶层两段：
+`saves/*.json`，顶层是存档元信息 + 一局游戏的完整状态：
 
 ```json
 {
-  "meta": {"version": 1, "saved_at": "...", "day": 32, "name": "..."},
+  "format": "airline-sim-save", "version": 1,
+  "saved_at": "...", "name": "...", "auto": false,
   "game": {
-    "day": 32, "seed": 42, "speed": 4, "paused": false,
+    "day": 32, "seed": 42, "speed": 4, "paused": false, "next_rid": 9,
     "mode": "goals", "mode_chosen": true,
     "goal_start_day": 0, "goal_deadline_day": 3600,
     "goal_state": {...}, "settlement": null,
-    "player": {...}, "airlines": [...], "routes": [...],
-    "world": {"slots_used": {...}}, "log": [...], "rng_state": "..."
+    "airlines": [{"name": "...", "is_player": true, "fleet": [...], "routes": [...],
+                  "history": [...], "monthly": [...]}],
+    "world": {"slots_used": {...}}, "log": [...], "snapshots": [...],
+    "params": {...}, "rng_state": "..."
   }
 }
 ```
@@ -306,7 +326,12 @@ python -m compileall -q server sim calibration
 - 写入走「临时文件 + 原子替换」
 - `from_save()` 手工校验并重建对象；旧存档缺 `mode/goal_*` 时默认沙盒，仍可读
 - 随机数状态入档：同一天重放结果一致（FR-1202）
-- 单档约 0.4 MB（50 AI、30 天量级），上限 5 MB 有余量
+- 单档约 1.7 MB（50 AI、day 1000 量级）；逐日记录只留最近 90 天、月报只留最近 36 条，
+  存档体积不随天数线性膨胀（见下条）
+- `history` 只保留 `HISTORY_DAYS = 90` 天：读取方最多回溯 30 天（月报聚合、快照、图表），
+  写档时截断；`from_save()` 也会裁掉旧档里的超长历史，所以老存档一读一存就瘦下来
+  （实测 day 1005：10.8 MB → 1.7 MB）
+- `monthly` 只保留 `MONTHLY_KEEP = 36` 条，满足 FR-706「12 个月可回溯」与高质高效目标的 24 个月窗口
 
 ---
 
@@ -329,7 +354,8 @@ python -m compileall -q server sim calibration
 - 只由本机同版本前端访问后端；输入来自可信玩家
 - 不做鉴权、限流、CSRF、跨进程存档锁、字段级 schema 校验
 - `/api/command` 收到非数字的 `daily_flights`/`price_index`/`amount` 时，可能直接结束请求
-- 多个端口同时读写同一个 `saves/` 没有加锁，测试请用副本或独立目录
+- 多个端口同时读写同一个 `saves/` 没有加锁：测试或开多份对局时用
+  `AIRLINE_SIM_SAVES=<目录>` 把存档指到别处（`tools/server_check.py` 就是这么做的）
 - 后端只绑 `127.0.0.1`，静态文件服务有目录穿越防护（`Path.relative_to` 校验）
 
 产品化优先级：参数类型校验与统一错误响应 → 鉴权/限流 → 存档并发与原子写 → 反向代理。

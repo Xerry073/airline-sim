@@ -55,6 +55,7 @@ server/           后端（标准库 http.server，零依赖）
 sim/              模拟内核（纯 Python，无 IO）
   simulate.py       兼容门面（re-export）
   config.py         系数、目标常量、区域名
+  names.py          AI 公司名池（40 中 + 60 英）
   util.py           工具函数
   model.py          World / Aircraft / Route / Airline
   products.py       行程产品构建
@@ -64,7 +65,7 @@ sim/              模拟内核（纯 Python，无 IO）
   goals.py          目标模式判定
   game.py           Game：推进、指令、快照、存档
   report.py         批量模拟与报告
-  selftest.py       67 条验收自测
+  selftest.py       80 条验收自测
 
 web/              前端（零构建，纯静态）
   index.html        页面结构 + 脚本加载顺序
@@ -79,7 +80,7 @@ web/              前端（零构建，纯静态）
   data/world.geo.json  内置陆地轮廓
 
 calibration/      系数表与机场数据（params.json、airports.csv、calibrate.py）
-tools/            测试脚本（asset/map/goal/panel/route_gui_check.js）与打包脚本
+tools/            测试脚本（asset/map/goal/panel/route_gui_check.js、server_check.py）与打包脚本
 docs/             需求文档、规则边界
 saves/            存档（运行时生成，不入库）
 ```
@@ -96,6 +97,7 @@ python server/supervisor.py --port 8777 --ai 10 --day-seconds 0.5 --speed 4
 
 ```bash
 python sim/selftest.py
+python tools/server_check.py
 node tools/asset_check.js
 node tools/map_check.js
 node tools/goal_check.js
@@ -129,4 +131,4 @@ powershell -ExecutionPolicy Bypass -File tools/package.ps1 -Version 1.0
 
 - 单机 Demo：后端只监听 `127.0.0.1`，不做鉴权/限流/字段级校验，详见开发者文档「Demo 边界」
 - 时间：1 游戏日 = 60 秒 ÷ 倍速（默认 4 倍速 ≈ 15 秒一天）
-- 存档：JSON 明文，单档约 0.4 MB（50 AI、30 天量级）
+- 存档：JSON 明文，单档约 1.7 MB（50 AI、day 1000 量级）；逐日记录只保留最近 90 天，长局不会越存越大

@@ -27,7 +27,8 @@ python server/supervisor.py --port 8777 --ai 10 --day-seconds 0.5 --speed 4
 
 ```bash
 python -m compileall -q server sim calibration   # 语法
-python sim/selftest.py                            # 67 条内核验收
+python sim/selftest.py                            # 80 条内核验收
+python tools/server_check.py                      # 8 条后端冒烟：启动、保存并重启、保存并退出
 node tools/asset_check.js                         # 前端资源引用与语法
 node tools/map_check.js                           # 31 条地图几何
 node tools/goal_check.js                          #  8 条目标模式
@@ -49,7 +50,7 @@ calibration/  系数与机场数据              docs/    需求、规则边界
 ### sim/ 只允许"向下依赖"
 
 ```
-config → util → model → products → market → settle → ai → goals → game → report
+config → names → util → model → products → market → settle → ai → goals → game → report
 ```
 
 - 左边的模块不能 import 右边的；`sim/simulate.py` 只是兼容门面，**不要往里加逻辑**

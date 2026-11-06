@@ -366,6 +366,55 @@ def main():
     r_bad = g.apply("rename_airline", {"name": " "})
     check("UI-01", "空公司名称被拒绝", not r_bad.get("ok"), str(r_bad))
 
+    # ---------- AI 公司名池 ----------
+    check("FR-1002", "AI 名池是 40 个中文 + 60 个英文，整体不重复",
+          len(S.AI_NAMES_CN) == 40 and len(S.AI_NAMES_EN) == 60
+          and len(S.AI_NAME_POOL) == 100 and len(set(S.AI_NAME_POOL)) == 100
+          and all(n.endswith("航空") for n in S.AI_NAMES_CN)
+          and all(n.endswith(" Airlines") for n in S.AI_NAMES_EN),
+          f"{len(S.AI_NAMES_CN)} 中 / {len(S.AI_NAMES_EN)} 英 / {len(set(S.AI_NAME_POOL))} 唯一")
+    g_named = S.Game(n_ai=50, with_player=True, seed=42)
+    ai_names = [a.name for a in g_named.airlines if not a.is_player]
+    check("FR-1002", "50 家 AI 从池子里各取一个名字、互不重复",
+          len(ai_names) == 50 and len(set(ai_names)) == 50
+          and all(n in S.AI_NAME_POOL for n in ai_names)
+          and "玩家航空" not in ai_names,
+          f"{ai_names[:4]} …")
+    check("FR-1002", "同一局的 50 家 AI 里中英文名字混着出现",
+          any(n.endswith("航空") for n in ai_names)
+          and any(n.endswith(" Airlines") for n in ai_names),
+          f"{ai_names[:4]} …")
+    check("FR-1002", "同一 seed 名字可复现，换 seed 名字会变",
+          [a.name for a in S.Game(n_ai=50, seed=42).airlines]
+          == [a.name for a in S.Game(n_ai=50, seed=42).airlines]
+          and [a.name for a in S.Game(n_ai=50, seed=42).airlines]
+          != [a.name for a in S.Game(n_ai=50, seed=43).airlines])
+    check("FR-1002", "抽名字不消耗对局随机数流（同一 seed 的 AI 行为不变）",
+          S.Game(n_ai=0, seed=9).rng.getstate() == S.Game(n_ai=50, seed=9).rng.getstate())
+    check("FR-1002", "玩家自己占用的名字不会分给 AI",
+          all(a.name != "云翼航空" for a in S.Game(n_ai=50, seed=5,
+                                                 player_name="云翼航空",
+                                                 with_player=True).airlines
+              if not a.is_player))
+    check("FR-1002", "池子不够时用 AI-nn 兜底且仍然唯一",
+          (lambda ns: len(ns) == 105 and len(set(ns)) == 105)(
+              S.pick_ai_names(105, seed=1)))
+    # 旧存档（AI-01…）读档时改名，玩家名字与已有名字不动
+    raw_legacy = json.loads(json.dumps(g_named.to_save(), ensure_ascii=False))
+    for idx, ad in enumerate(a for a in raw_legacy["game"]["airlines"] if not a["is_player"]):
+        ad["name"] = f"AI-{idx + 1:02d}"
+    g_legacy = S.Game.from_save(raw_legacy)
+    renamed = [a.name for a in g_legacy.airlines if not a.is_player]
+    check("FR-1002", "旧存档的 AI-nn 读档后换成了公司名，且不重名、不碰玩家",
+          len(set(renamed)) == len(renamed)
+          and not any(S.LEGACY_AI_NAME.match(n) for n in renamed)
+          and g_legacy.player.name == g_named.player.name,
+          f"{renamed[:3]} …")
+    check("FR-1002", "改名只发生在读档那一次（再存再读名字不变）",
+          [a.name for a in S.Game.from_save(
+              json.loads(json.dumps(g_legacy.to_save(), ensure_ascii=False))).airlines]
+          == [a.name for a in g_legacy.airlines])
+
     # ---------- 航线数据看板 ----------
     g2 = S.Game(n_ai=0, with_player=True, seed=8)
     opened = g2.apply("open_route", {"segments": ["PEK", "SHA"],
@@ -559,6 +608,43 @@ def main():
           loaded.day == g4.day
           and abs(loaded.player.cash - g4.player.cash) < 1e-9
           and len(loaded.airlines) == len(g4.airlines))
+
+    # ---------- 存档体积：逐日/逐月记录只留近期窗口 ----------
+    # 回归：history 每天追加且从不截断，51 家 × 995 天占了 day 1005 存档的 11.3 / 10.7 MB。
+    # 读取方只有 history[-1] 与 history[-30:]，所以保留 HISTORY_DAYS 天即可。
+    g_long = S.Game(n_ai=3, with_player=True, seed=31)
+    for _ in range(S.HISTORY_DAYS + 40):
+        g_long.advance_day()
+    hist_lens = {len(al.history) for al in g_long.airlines if al.alive}
+    check("UI-04", f"跑 {(S.HISTORY_DAYS + 40)} 天后逐日记录被截到 {S.HISTORY_DAYS} 天以内",
+          all(len(al.history) <= S.HISTORY_DAYS for al in g_long.airlines)
+          and len(g_long.player.history) == S.HISTORY_DAYS,
+          f"各航司历史长度 {sorted(hist_lens)}")
+    check("UI-04", f"月报只保留最近 {S.MONTHLY_KEEP} 条",
+          all(len(al.monthly) <= S.MONTHLY_KEEP for al in g_long.airlines),
+          f"{max((len(al.monthly) for al in g_long.airlines), default=0)} 条")
+
+    # 旧存档里超长的 history 在读档时被裁掉，末尾状态保持不变
+    raw = json.loads(json.dumps(g_long.to_save(), ensure_ascii=False))
+    p_raw = next(a for a in raw["game"]["airlines"] if a["is_player"])
+    tail = p_raw["history"][-1]
+    tail_month = p_raw["monthly"][-1] if p_raw["monthly"] else None
+    p_raw["history"] = p_raw["history"] * 11 + p_raw["history"][-1:]
+    p_raw["monthly"] = p_raw["monthly"] * 11 + p_raw["monthly"][-1:]
+    trimmed = S.Game.from_save(raw)
+    check("UI-04", "读档裁掉超长历史并保留最新一天的数据",
+          len(trimmed.player.history) == S.HISTORY_DAYS
+          and trimmed.player.history[-1] == tail
+          and len(trimmed.player.monthly) == S.MONTHLY_KEEP
+          and trimmed.player.monthly[-1] == tail_month
+          and abs(trimmed.player.cash - g_long.player.cash) < 1e-9,
+          f"history {len(trimmed.player.history)} / monthly {len(trimmed.player.monthly)}")
+    day_before = trimmed.day
+    trimmed.advance_day()
+    check("UI-04", "裁剪后的存档可以继续推进（月报窗口仍有 30 天可用）",
+          trimmed.day == day_before + 1
+          and len(trimmed.player.history) == S.HISTORY_DAYS
+          and all(len(al.monthly) <= S.MONTHLY_KEEP for al in trimmed.airlines))
 
     # ---------- 汇总 ----------
     print("\n" + "=" * 60)

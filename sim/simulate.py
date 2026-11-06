@@ -7,6 +7,7 @@
 分层（只允许自上而下依赖）::
 
     config    路径、成本与经济系数、目标常量
+    names     AI 公司名池（独立随机数流，不影响对局 rng）
     util      工具函数（含 FR-403 时刻触及计数）
     model     World / Aircraft / Route / Airline
     products  行程产品构建
@@ -21,6 +22,7 @@
 """
 
 from config import *          # noqa: F401,F403
+from names import *           # noqa: F401,F403
 from util import *            # noqa: F401,F403
 from model import *           # noqa: F401,F403
 from products import *        # noqa: F401,F403

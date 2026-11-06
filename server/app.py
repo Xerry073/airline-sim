@@ -27,6 +27,7 @@ GET  /             静态前端（web/ 目录）
 """
 
 import argparse
+import sys
 from http.server import ThreadingHTTPServer
 
 from api import Handler
