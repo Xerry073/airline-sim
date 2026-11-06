@@ -461,6 +461,7 @@ function renderFleetOp(){
   $("#opbody").innerHTML=`
     <div class="sectionline"><span>现有机队</span><span>${fleet.length} 架</span></div>
     ${capRows}
+    <div class="hintline" style="margin:2px 0 8px">每架飞机每天最多 16 h / 8 段；同一个航段连通块里的航线由块内基地的飞机串飞，跨块要调机。</div>
     <div class="fleetlist"><table><thead><tr><th>机型</th><th>机龄</th><th>基地</th><th>方式</th><th>出手/退租</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table></div>
     <div class="opcard" style="margin-top:12px">

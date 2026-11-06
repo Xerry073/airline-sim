@@ -208,14 +208,9 @@ function render(){
     $("#pname").textContent=p.alive?p.name:p.name+"（已破产）";
     $("#rank").textContent=p.rank?`排名 #${p.rank}`:"未排名";
     const k=p.kpi||{}, eb=k.ebitda||0;
-    const cap=p.capacity||{}, util=cap.hours_cap?cap.hours_used/cap.hours_cap:0;
-    const byType=cap.pools||[];
-    const worst=byType.slice().sort((a,b)=>
-      (b.hours_cap?b.hours_used/b.hours_cap:0)-(a.hours_cap?a.hours_used/a.hours_cap:0))[0];
-    const worstPct=worst&&worst.hours_cap?Math.round(100*worst.hours_used/worst.hours_cap):null;
-    const capCell=worst&&worstPct!==null
-      ? `<b>${worst.type}</b> ${worstPct}%`
-      : `${(cap.hours_used||0).toFixed(1)}/${(cap.hours_cap||0).toFixed(0)}h`;
+    const cap=p.capacity||{};
+    const usage=fleetUsageSummary(cap);
+    const usageCls=usage.over?'neg':(usage.worstPct>=85?'warn':'pos');
     $("#kpis").innerHTML=`
       <div class="kpi"><div class="l">现金 ¥M</div><div class="v">${money(p.cash)}</div></div>
       <div class="kpi"><div class="l">负债 ¥M</div><div class="v">${money(p.debt)}</div></div>
@@ -223,8 +218,10 @@ function render(){
       <div class="kpi"><div class="l">日 EBITDA</div><div class="v ${eb>=0?'pos':'neg'}">${money(eb)}</div></div>
       <div class="kpi"><div class="l">口碑</div><div class="v">${(p.reputation||0).toFixed(1)}</div></div>
       <div class="kpi"><div class="l">机队/航线</div><div class="v">${p.fleet.length}/${p.routes.length}</div></div>
-      <div class="kpi" title="每个机型独立计算：每架 16 h / 8 段，机型之间不能互相借运力"><div class="l">日占机</div>
-        <div class="v ${worstPct===null?'':(worstPct>=85?'neg':(worstPct<50?'warn':'pos'))}">${capCell}</div></div>`;
+      <div class="kpi" title="机队利用 = 每天被航线占用的飞机小时 ÷ 上限。每架飞机每天最多 16 h / 8 段，按机型和航段连通块分开算。">
+        <div class="l">机队利用</div>
+        <div class="v ${usageCls}">${usage.pct}%</div>
+        <div class="sub">${usage.text}</div></div>`;
     $("#routecount").textContent=p.routes.length;
     $("#routes").innerHTML=p.routes.map(r=>`
       <tr class="rrow" onclick="openOp('route',${r.id})" title="点击调整价格 / 班次">
@@ -281,6 +278,24 @@ async function cmd(text){
   if(!map[op]){ toast("未知指令 "+op,true); return; }
   const res=await api("/api/command",map[op]());
   if(res.ok){ toast("已执行"); refresh(); }
+}
+
+/* 机队利用汇总：按机型列利用率，并给出最紧张的一档（供 KPI 与测试使用） */
+function fleetUsageSummary(cap){
+  const pools=(cap&&cap.pools)||[];
+  let used=0, total=0, over=false, worstPct=0, worstType="";
+  const parts=[];
+  for(const b of pools){
+    used+=Number(b.hours_used)||0;
+    total+=Number(b.hours_cap)||0;
+    const pct=b.hours_cap?Math.round(100*(Number(b.hours_used)||0)/b.hours_cap):0;
+    if(b.over||pct>=100) over=true;
+    if(pct>worstPct){ worstPct=pct; worstType=b.type; }
+    if((Number(b.hours_used)||0)>0||(Number(b.count)||0)>0) parts.push(`${b.type} ${pct}%`);
+  }
+  const pct=total?Math.round(100*used/total):0;
+  return {pct, worstPct, worstType, over,
+          text: parts.slice(0,3).join(" · ") || "—"};
 }
 
 /* ============================================================

@@ -224,7 +224,7 @@ node tools/route_gui_check.js   # 10 条：开线手势（右键起点 / 左键�
 python -m compileall -q server sim calibration
 ```
 
-当前记录：`66/66`、`5/5`、`31/31`、`8/8`、`18/18`、`10/10`，`compileall` 退出码 0。
+当前记录：`66/66`、`5/5`、`31/31`、`8/8`、`20/20`、`10/10`，`compileall` 退出码 0。
 
 ### 前端测试怎么工作
 

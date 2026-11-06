@@ -320,5 +320,23 @@ const mine = {
     "机队面板对租赁机显示退租与押金，而不是出售价");
 }
 
+// 16) 机队利用汇总：总体百分比 + 各机型小字（新机型 0% 也要显示）
+{
+  const appSrc = fs.readFileSync(path.join(root, "web", "js", "app.js"), "utf8");
+  const start = appSrc.indexOf("function fleetUsageSummary");
+  const end = appSrc.indexOf("/* ====", start);
+  if (start < 0 || end < 0) { console.error("找不到 fleetUsageSummary"); process.exit(1); }
+  const fn = new Function(appSrc.slice(start, end) + "\n; return fleetUsageSummary;")();
+  const s = fn({ pools: [
+    { type: "A320", count: 2, hours_used: 32, hours_cap: 32, over: false },
+    { type: "B77W", count: 1, hours_used: 0, hours_cap: 16, over: false },
+  ] });
+  check(s.pct === 67 && s.over && s.worstType === "A320"
+    && s.text === "A320 100% · B77W 0%",
+    "机队利用汇总给出总体百分比与各机型利用率", JSON.stringify(s));
+  const empty = fn({ pools: [] });
+  check(empty.pct === 0 && empty.text === "—", "无机队时显示占位");
+}
+
 console.log("\n" + (failed ? "FAILED" : "OK") + "  " + passed + " passed, " + failed + " failed");
 process.exit(failed ? 1 : 0);
