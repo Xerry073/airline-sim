@@ -408,6 +408,26 @@ def main():
     r_unknown = g6.apply("set_aircraft", {"route_id": rid6, "ac_type": "XXXX"})
     check("UI-05", "不存在的机型被拒绝", not r_unknown.get("ok"), str(r_unknown))
 
+    # ---------- 成本分项与利用率（解释「航线都赚、公司却亏」） ----------
+    g7 = S.Game(n_ai=0, with_player=True, seed=13)
+    g7.apply("open_route", {"segments": ["PEK", "SHA"], "daily_flights": 1,
+                            "ac_type": "A320"})
+    g7.advance_day()
+    pl7 = g7.snapshot()["player"]
+    c7 = pl7.get("costs") or {}
+    need = {"fuel", "landing", "nav", "maint", "depreciation", "lease", "staff",
+            "distribution", "ground", "hub_fixed", "interest", "idle",
+            "fixed_total", "total"}
+    check("UI-06", "快照给出成本分项与固定开销合计",
+          need <= set(c7) and abs(
+              c7["fixed_total"] - (c7["staff"] + c7["hub_fixed"] + c7["depreciation"]
+                                   + c7["lease"] + c7["interest"] + c7["idle"])) <= 0.002,
+          str({k: c7.get(k) for k in ("staff", "hub_fixed", "depreciation", "lease", "fixed_total")}))
+    cap7 = pl7.get("capacity") or {}
+    check("UI-06", "快照给出机队利用率（占机小时与航段）",
+          cap7.get("hours_cap", 0) > 0 and 0 < cap7.get("hours_used", 0) <= cap7["hours_cap"]
+          and cap7.get("segments_cap", 0) > 0, str(cap7))
+
     # ---------- AI 公开航线网络 ----------
     g3 = S.Game(n_ai=3, with_player=True, seed=11)
     for _ in range(10):

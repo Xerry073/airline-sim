@@ -93,7 +93,7 @@
   .kpi{background:#111923;border:1px solid var(--line);border-radius:5px;padding:6px 8px}
   .kpi .l{color:var(--dim);font-size:10px}
   .kpi .v{font-size:15px;font-variant-numeric:tabular-nums}
-  .pos{color:var(--ok)} .neg{color:var(--bad)}
+  .pos{color:var(--ok)} .neg{color:var(--bad)} .warn{color:#ffb37a}
 
   table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
   th,td{text-align:left;padding:4px 6px;border-bottom:1px solid #1b2531;font-size:11px}

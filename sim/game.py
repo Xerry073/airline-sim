@@ -591,6 +591,7 @@ class Game:
                 "dead_reason": al.dead_reason, "dead_day": al.dead_day,
                 "contractions": al.contractions, "monthly": al.monthly,
                 "ebitda_12m": getattr(al, "ebitda_12m", 0.0),
+                "last_costs": getattr(al, "last_costs", None),
                 "fleet": [aircraft_data(a) for a in al.fleet],
                 "routes": [route_data(r) for r in al.routes],
             }
@@ -697,6 +698,7 @@ class Game:
             al.contractions = int(ad.get("contractions", 0))
             al.monthly = list(ad.get("monthly") or [])
             al.ebitda_12m = float(ad.get("ebitda_12m", 0.0))
+            al.last_costs = ad.get("last_costs")
 
             for fd in ad.get("fleet") or []:
                 if fd.get("type") not in w._aircraft_types:
@@ -827,6 +829,15 @@ class Game:
                 ],
                 "kpi": {"pax": h.get("pax", 0), "revenue": h.get("revenue", 0),
                         "cost": h.get("cost", 0), "ebitda": h.get("ebitda", 0)},
+                # 成本分项与机队利用率：解释「航线都赚、公司却亏」
+                "costs": ({k: round(v, 4) for k, v in p.last_costs.items()}
+                          if getattr(p, "last_costs", None) else None),
+                "capacity": {
+                    "hours_used": round(p.total_hours(), 1),
+                    "hours_cap": round(p.capacity_hours(), 1),
+                    "segments_used": round(p.total_segments(), 1),
+                    "segments_cap": p.capacity_segments(),
+                },
             }
         out["goals"] = self.goals_snapshot()
         return out

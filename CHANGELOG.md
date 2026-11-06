@@ -4,6 +4,47 @@
 
 ---
 
+## 2026-11-06 · 可解释性轮：把「航线都赚、公司却亏」摆在面上
+
+背景：玩家开了 4 条航线、每条利润率都是正的，公司 EBITDA 却是 −0.48。查下来折旧只占成本
+4.7%，真正的原因是**机队只用了 46%**（22.3/48 小时）+ 价格指数偏低（0.96–1.05，同市场 AI 约 1.2）。
+按「不改数值、只把账说清楚」的决定，这一轮只做可见性。
+
+### 变更
+
+- **快照新增成本分项与利用率**（`sim/settle.py`、`sim/game.py`）
+  - `settle_day()` 把当日 12 项成本拆解存到 `al.last_costs`，随存档往返
+  - `player.costs{fuel…total, fixed_total}`、`player.capacity{hours_used,hours_cap,segments_used,segments_cap}`
+  - `fixed_total` 只含人工 + 枢纽固定 + 折旧 + 租赁 + 利息 + 闲置，即可归集成本之外的部分
+- **侧栏 KPI 增加「日占机」**（`web/js/app.js`、`web/css/app.css`）
+  - 显示 `22.3/48h`，≥75% 绿、<50% 黄；标题说明固定开销按机队发生
+- **航线管理增加「公司固定开销」卡片**（`web/js/panels.js`）
+  - 人工 / 枢纽 / 折旧 / 租赁 四项明细，合计 `fixed_total`
+  - 「全部航线利润合计」「覆盖固定开销后」两行直接给出差额（正绿负红）
+  - 附机队占机率与一段说明：航线利润只扣可归集成本，固定开销摊不薄就是亏
+- **文档**：玩家手册新增「为什么每条航线都赚钱，公司还是亏」；KPI 与快照契约同步
+- **测试**
+  - `sim/selftest.py` 56 → **58**：成本分项齐全且 `fixed_total` 自洽；利用率字段在合理区间
+  - `tools/panel_check.js` 14 → **15**：固定开销卡片、利润合计、占机率文案
+
+### 测试
+
+```text
+python sim/selftest.py        -> 58 / 58
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 31 / 31
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     -> 15 / 15
+node tools/route_gui_check.js -> 10 / 10
+```
+
+### 说明
+
+数值（`ECON`）一个都没改：折旧年限、残值、人工、租赁率维持原样。这一轮只是把
+「固定开销 vs 航线利润」和「机队利用率」变成可读的数字。
+
+---
+
 ## 2026-11-06 · 运营轮：航线可以换机型
 
 目的：原来一条航线开通时机型就定死了，想从小飞机换大飞机只能关线重开（还要吃时刻与

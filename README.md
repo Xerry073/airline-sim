@@ -64,7 +64,7 @@ sim/              模拟内核（纯 Python，无 IO）
   goals.py          目标模式判定
   game.py           Game：推进、指令、快照、存档
   report.py         批量模拟与报告
-  selftest.py       56 条验收自测
+  selftest.py       58 条验收自测
 
 web/              前端（零构建，纯静态）
   index.html        页面结构 + 脚本加载顺序

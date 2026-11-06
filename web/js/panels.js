@@ -220,6 +220,28 @@ function renderRouteOp(){
     const label=t?`${t.name}（${t.seats} 座 · ${Math.round(t.range)} km）`:code;
     return `<option value="${code}"${code===r.ac_type?" selected":""}>${label}</option>`;
   }).join("");
+
+  /* 公司级固定开销 vs 全部航线利润：解释「每条航线都赚、公司却亏」 */
+  const profitSum=routes.reduce((s,x)=>s+(Number(x.profit_M)||0),0);
+  const costs=(STATE.player&&STATE.player.costs)||null;
+  const cap=(STATE.player&&STATE.player.capacity)||{};
+  const utilPct=cap.hours_cap?Math.round(100*cap.hours_used/cap.hours_cap):null;
+  const gap=costs?profitSum-costs.fixed_total:null;
+  const fixedCard=!costs
+    ? `<div class="opcard"><h4>公司固定开销 <span>待结算</span></h4>
+       <div class="hintline">成本分项在每日结算后生成；推进 1 天或重启后端后显示。</div></div>`
+    : `<div class="opcard">
+        <h4>公司固定开销 <span>¥${costs.fixed_total.toFixed(2)}M/日</span></h4>
+        <div class="req"><span>人工 / 枢纽 / 折旧 / 租赁</span>
+          <b>¥${costs.staff.toFixed(2)} · ¥${costs.hub_fixed.toFixed(2)} · ¥${costs.depreciation.toFixed(2)} · ¥${costs.lease.toFixed(2)}</b></div>
+        <div class="req"><span>全部航线利润合计</span><b class="pos">¥${profitSum.toFixed(2)}M/日</b></div>
+        <div class="req"><span>覆盖固定开销后</span>
+          <b class="${gap>=0?'pos':'neg'}">${gap>=0?"+":""}¥${gap.toFixed(2)}M/日</b></div>
+        ${utilPct!==null?`<div class="req"><span>机队日占机</span>
+          <b class="${utilPct>=75?'pos':(utilPct<50?'warn':'')}">${cap.hours_used}/${cap.hours_cap} h（${utilPct}%）</b></div>`:""}
+        <div class="hintline">航线利润只扣可归集成本；人工、枢纽、折旧、租赁按机队规模发生，与飞多少班无关。
+          占机率低说明飞机在闲置，固定开销摊不薄。</div>
+      </div>`;
   $("#opbody").innerHTML=`
     <div class="field"><label>选择航线</label><select id="rsel">${opts}</select></div>
     <div class="marketbox">
@@ -239,6 +261,7 @@ function renderRouteOp(){
       </div>
       <div class="hintline" style="margin-top:6px">利润率为航线可归集口径，不含折旧租赁与总部固定费用。</div>
     </div>
+    ${fixedCard}
     <div class="opcard">
       <h4>竞争者 <span>${contested?`${rivals.length} 条共享市场`:"暂无"}</span></h4>
       ${rivalRows||'<div class="empty">这条航线目前没有 AI 在飞同一个市场。</div>'}

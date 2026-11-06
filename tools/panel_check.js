@@ -186,7 +186,12 @@ function renderMine(playerRoutes, opponentRoutes, fleet) {
     "routeMarketSet", "routeIsContested", "aircraftOf", "haversineKm",
     routeBlock + "\n; return renderRouteOp;");
   const STATE = {
-    player: { routes: playerRoutes, fleet: fleet || [{ type: playerRoutes[0].ac_type }] },
+    player: {
+      routes: playerRoutes, fleet: fleet || [{ type: playerRoutes[0].ac_type }],
+      costs: { staff: 0.42, hub_fixed: 0.08, depreciation: 0.06, lease: 0.14,
+               interest: 0, idle: 0, fixed_total: 0.70, total: 1.26 },
+      capacity: { hours_used: 22.3, hours_cap: 48, segments_used: 12, segments_cap: 24 },
+    },
     opponent_routes: opponentRoutes,
   };
   const render = fn(nodeFor, escHTML, STATE, { routeId: playerRoutes[0].id }, APX,
@@ -254,6 +259,16 @@ const mine = {
     && !/value="A333"/.test(html) && /更换机型/.test(html),
     "换机型下拉只列机队已有型号，且带更换按钮",
     html.replace(/\s+/g, " ").match(/<select id="acsel">[\s\S]*?<\/select>/)?.[0] || "");
+}
+
+// 13) 固定开销 vs 航线利润：解释「每条都赚、公司却亏」
+{
+  const html = renderMine([mine], []);
+  check(/公司固定开销/.test(html) && /¥0\.70M\/日/.test(html)
+    && /全部航线利润合计/.test(html) && /覆盖固定开销后/.test(html)
+    && /机队日占机/.test(html) && /22\.3\/48 h（46%）/.test(html),
+    "航线管理显示固定开销、航线利润合计与占机率",
+    html.replace(/\s+/g, " ").slice(0, 260));
 }
 
 console.log("\n" + (failed ? "FAILED" : "OK") + "  " + passed + " passed, " + failed + " failed");
