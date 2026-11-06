@@ -367,15 +367,22 @@ def main():
     check("UI-01", "空公司名称被拒绝", not r_bad.get("ok"), str(r_bad))
 
     # ---------- AI 公司名池 ----------
-    check("FR-1002", "AI 名池提供 100 个不重复的公司名",
-          len(S.AI_NAME_POOL) == 100 and len(set(S.AI_NAME_POOL)) == 100,
-          f"{len(S.AI_NAME_POOL)} 个 / {len(set(S.AI_NAME_POOL))} 个唯一")
+    check("FR-1002", "AI 名池是 40 个中文 + 60 个英文，整体不重复",
+          len(S.AI_NAMES_CN) == 40 and len(S.AI_NAMES_EN) == 60
+          and len(S.AI_NAME_POOL) == 100 and len(set(S.AI_NAME_POOL)) == 100
+          and all(n.endswith("航空") for n in S.AI_NAMES_CN)
+          and all(n.endswith(" Airlines") for n in S.AI_NAMES_EN),
+          f"{len(S.AI_NAMES_CN)} 中 / {len(S.AI_NAMES_EN)} 英 / {len(set(S.AI_NAME_POOL))} 唯一")
     g_named = S.Game(n_ai=50, with_player=True, seed=42)
     ai_names = [a.name for a in g_named.airlines if not a.is_player]
     check("FR-1002", "50 家 AI 从池子里各取一个名字、互不重复",
           len(ai_names) == 50 and len(set(ai_names)) == 50
           and all(n in S.AI_NAME_POOL for n in ai_names)
           and "玩家航空" not in ai_names,
+          f"{ai_names[:4]} …")
+    check("FR-1002", "同一局的 50 家 AI 里中英文名字混着出现",
+          any(n.endswith("航空") for n in ai_names)
+          and any(n.endswith(" Airlines") for n in ai_names),
           f"{ai_names[:4]} …")
     check("FR-1002", "同一 seed 名字可复现，换 seed 名字会变",
           [a.name for a in S.Game(n_ai=50, seed=42).airlines]

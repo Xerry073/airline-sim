@@ -3,8 +3,9 @@
 
 设计要点：
 
-1. **池子固定 100 个名字**（``AI_NAME_POOL``），开新局时按种子无放回抽取 ``n_ai`` 个，
-   所以同一局内不会重名，不同种子抽到的组合也不同。
+1. **池子固定 100 个名字**，40 个中文（``XXX航空``）+ 60 个英文（``XXX Airlines``），
+   开新局时按种子无放回抽取 ``n_ai`` 个，所以同一局内不会重名，中英文会自然混着出现，
+   不同种子抽到的组合也不同。
 2. **不消耗对局随机数流**。名字用独立 ``random.Random`` 生成：``Game.rng`` 的序列决定了
    AI 的开线/定价决策，如果在这儿抽名字，同一 seed 的整局走势都会改变（老存档之外的
    行为回归、标定数据、selftest 期望值全部要重算）。名字只影响观感，不该有这个副作用。
@@ -13,41 +14,38 @@
 
 import random
 
-# 100 个可选公司名：两到四个字的品牌 + 航空。
-# 命名走「山/水/星象/候鸟」四类意象，故意避开现实里已有的知名航司，
-# 免得玩起来像在跟真公司抢客。
-AI_NAME_POOL = (
-    # —— 云天光影 ——
-    "云翼航空", "天穹航空", "长风航空", "瀚海航空", "碧霄航空",
-    "苍穹航空", "星汉航空", "银河航空", "曙光航空", "晨曦航空",
-    # —— 云霞 ——
-    "极光航空", "虹霓航空", "流云航空", "瑞云航空", "祥云航空",
-    "彩云航空", "紫云航空", "青云航空", "白云航空", "彤云航空",
-    # —— 神鸟 ——
-    "飞鸿航空", "惊鸿航空", "白鹭航空", "青鸾航空", "朱雀航空",
-    "玄武航空", "麒麟航空", "猎鹰航空", "苍鹰航空", "海东青航空",
-    # —— 候鸟 ——
-    "鸿雁航空", "信天翁航空", "海燕航空", "雨燕航空", "蜂鸟航空",
-    "云雀航空", "夜莺航空", "孔雀航空", "天鹅航空", "天鹰航空",
-    # —— 名山 ——
-    "昆仑航空", "天山航空", "祁连航空", "太行航空", "秦岭航空",
-    "峨眉航空", "泰山航空", "华山航空", "长白航空", "贺兰航空",
-    # —— 大川 ——
-    "唐古拉航空", "珠峰航空", "澜沧航空", "雅鲁航空", "松花航空",
-    "辽河航空", "湘江航空", "闽江航空", "钱塘航空", "洞庭航空",
-    # —— 湖海 ——
-    "鄱阳航空", "太湖航空", "青海航空", "洱海航空", "泸沽航空",
-    "苍山航空", "玉龙航空", "梅里航空", "贡嘎航空", "神农航空",
-    # —— 关隘古城 ——
-    "敦煌航空", "楼兰航空", "龟兹航空", "高昌航空", "交河航空",
-    "玉门航空", "阳关航空", "嘉峪航空", "雁门航空", "居庸航空",
-    # —— 星象 ——
-    "北斗航空", "织女航空", "天琴航空", "猎户航空", "仙女航空",
-    "天龙航空", "凤凰航空", "天狼航空", "北辰航空", "启明航空",
-    # —— 名胜 ——
-    "蓬莱航空", "崂山航空", "普陀航空", "九华航空", "五台航空",
-    "雁荡航空", "武夷航空", "五指航空", "天涯航空", "太白航空",
+# 中文名：方向、美好祝愿这类抽象两字词 + 航空，刻意不用具体的江河、山脉、城市地名。
+AI_NAMES_CN = (
+    "北方航空", "南方航空", "东方航空", "西部航空", "和平航空",
+    "太平航空", "大同航空", "中原航空", "华东航空", "华南航空",
+    "华北航空", "华中航空", "西南航空", "西北航空", "东北航空",
+    "阳光航空", "曙光航空", "旭日航空", "晨曦航空", "晴空航空",
+    "长空航空", "碧空航空", "星辰航空", "星辉航空", "明月航空",
+    "彩虹航空", "朝霞航空", "清风航空", "顺风航空", "扬帆航空",
+    "远航航空", "启航航空", "飞跃航空", "腾飞航空", "鹏程航空",
+    "万里航空", "锦绣航空", "卓越航空", "通达航空", "康宁航空",
 )
+
+# 英文名：单个意象词 + Airlines，跟 Spirit / Eastern / Ocean 一个风格。
+AI_NAMES_EN = (
+    "Spirit Airlines", "Eastern Airlines", "Ocean Airlines", "Horizon Airlines",
+    "Summit Airlines", "Aurora Airlines", "Pioneer Airlines", "Comet Airlines",
+    "Zenith Airlines", "Eclipse Airlines", "Nova Airlines", "Orbit Airlines",
+    "Falcon Airlines", "Albatross Airlines", "Pelican Airlines", "Heron Airlines",
+    "Sparrow Airlines", "Swift Airlines", "Kestrel Airlines", "Condor Airlines",
+    "Bison Airlines", "Antelope Airlines", "Puma Airlines", "Otter Airlines",
+    "Lynx Airlines", "Ibex Airlines", "Mammoth Airlines", "Walrus Airlines",
+    "Marlin Airlines", "Tarpon Airlines", "Coral Airlines", "Reef Airlines",
+    "Lagoon Airlines", "Harbor Airlines", "Anchor Airlines", "Compass Airlines",
+    "Meridian Airlines", "Crest Airlines", "Ridge Airlines", "Canyon Airlines",
+    "Prairie Airlines", "Tundra Airlines", "Monsoon Airlines", "Zephyr Airlines",
+    "Breeze Airlines", "Solstice Airlines", "Equinox Airlines", "Galaxy Airlines",
+    "Nebula Airlines", "Quasar Airlines", "Voyager Airlines", "Wayfarer Airlines",
+    "Trailblazer Airlines", "Northstar Airlines", "Polaris Airlines", "Borealis Airlines",
+    "Australis Airlines", "Sundial Airlines", "Lantern Airlines", "Beacon Airlines",
+)
+
+AI_NAME_POOL = AI_NAMES_CN + AI_NAMES_EN
 
 
 def pick_ai_names(count, seed, taken=()):

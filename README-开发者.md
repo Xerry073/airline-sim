@@ -45,7 +45,7 @@
 | `server/supervisor.py` | 监督进程：`app.py` 以退出码 42 退出时用原参数重启 |
 | `sim/simulate.py` | **兼容门面**：re-export 下面所有模块，保持旧 import 与 CLI 用法 |
 | `sim/config.py` | 路径、ECON/COST 系数、目标常量、区域名 |
-| `sim/names.py` | AI 公司名池（100 个）、按种子无放回抽取（独立随机数流） |
+| `sim/names.py` | AI 公司名池（40 中文 + 60 英文）、按种子无放回抽取（独立随机数流） |
 | `sim/util.py` | CSV 读取、大圆距离、clamp、sigmoid、`slot_touches` |
 | `sim/model.py` | `World` / `Aircraft` / `Route` / `Airline` |
 | `sim/products.py` | 航线 → 行程产品（直飞/经停/中转、候选上限、去重） |
@@ -219,7 +219,7 @@ boot            启动选择：进程启动并恢复自动存档时为 {day,name
 ## 6. 测试
 
 ```bash
-python sim/selftest.py          # 79 条内核验收（FR 编号对齐需求文档）
+python sim/selftest.py          # 80 条内核验收（FR 编号对齐需求文档）
 python tools/server_check.py    #  8 条后端冒烟：启动、保存并重启（退出码 42）、保存并退出
 node tools/asset_check.js       #  5 条：前端资源引用、加载顺序、语法、重名、顶层语句
 node tools/map_check.js         # 31 条：地图几何、分级、标签避让、大圆、日界线、开线焦点
@@ -229,7 +229,7 @@ node tools/route_gui_check.js   # 10 条：开线手势（右键起点 / 左键�
 python -m compileall -q server sim calibration
 ```
 
-当前记录：`79/79`、`8/8`、`5/5`、`31/31`、`8/8`、`23/23`、`10/10`，`compileall` 退出码 0。
+当前记录：`80/80`、`8/8`、`5/5`、`31/31`、`8/8`、`23/23`、`10/10`，`compileall` 退出码 0。
 
 `server_check.py` 会真起一个后端进程（不 mock），因为「保存并重启」这类路径只有跑起来才暴露
 ——`app.py` 曾经漏了 `import sys`，内核与前端检查全绿，但一点那个按钮就是 NameError。

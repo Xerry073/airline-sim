@@ -55,7 +55,7 @@ server/           后端（标准库 http.server，零依赖）
 sim/              模拟内核（纯 Python，无 IO）
   simulate.py       兼容门面（re-export）
   config.py         系数、目标常量、区域名
-  names.py          AI 公司名池（100 个）
+  names.py          AI 公司名池（40 中 + 60 英）
   util.py           工具函数
   model.py          World / Aircraft / Route / Airline
   products.py       行程产品构建
@@ -65,7 +65,7 @@ sim/              模拟内核（纯 Python，无 IO）
   goals.py          目标模式判定
   game.py           Game：推进、指令、快照、存档
   report.py         批量模拟与报告
-  selftest.py       79 条验收自测
+  selftest.py       80 条验收自测
 
 web/              前端（零构建，纯静态）
   index.html        页面结构 + 脚本加载顺序
