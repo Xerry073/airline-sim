@@ -23,8 +23,11 @@ jobs:
       - name: Python 语法检查
         run: python -m compileall -q server sim calibration
 
-      - name: 内核自测（67 条）
+      - name: 内核自测（79 条）
         run: python sim/selftest.py
+
+      - name: 后端冒烟：启动 / 保存并重启 / 保存并退出（8 条）
+        run: python tools/server_check.py
 
       - name: 前端资源引用检查
         run: node tools/asset_check.js

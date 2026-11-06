@@ -27,7 +27,8 @@ python server/supervisor.py --port 8777 --ai 10 --day-seconds 0.5 --speed 4
 
 ```bash
 python -m compileall -q server sim calibration   # 语法
-python sim/selftest.py                            # 67 条内核验收
+python sim/selftest.py                            # 79 条内核验收
+python tools/server_check.py                      # 8 条后端冒烟：启动、保存并重启、保存并退出
 node tools/asset_check.js                         # 前端资源引用与语法
 node tools/map_check.js                           # 31 条地图几何
 node tools/goal_check.js                          #  8 条目标模式

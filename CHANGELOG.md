@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-11-07 · 修复：「保存并重启」抛 NameError，后端不再被拉起
+
+复现存档体积问题时发现：`server/app.py` 的重启分支用了 `sys.stdout.flush()`，却漏了
+`import sys`。点「保存并重启」→ `NameError` → 退出码 1（不是约定的 42）→ supervisor 以为后端
+异常退出、不再拉起，页面直接连不上。内核与前端检查全绿也照样漏掉——它只在真起进程时暴露。
+
+### 变更
+
+- `server/app.py`：补 `import sys`
+- `server/paths.py`：存档目录支持 `AIRLINE_SIM_SAVES` 环境变量（默认仍是项目内 `saves/`），
+  方便冒烟测试与并行开多局，不必复制整个项目
+- 新增 `tools/server_check.py`（8 条）：真起一个后端进程，验启动 → `/api/restart` 退出码 42
+  → 重新启动 → `/api/quit` 退出码 0，并断言没写到工作区的 `saves/`
+- CI、`CONTRIBUTING.md`、`README-开发者.md` §6、`README.md` 都加上这条检查
+
+### 测试
+
+```text
+python tools/server_check.py  ->  8 /  8   （新增）
+python -m compileall -q server sim calibration -> 退出码 0
+```
+
+在 `HEAD` 的临时 worktree 里拿同一条用例跑过旧代码：三个断言失败，确认它能抓住这个回归。
+
+---
+
 ## 2026-11-07 · 对手有名字了：50 家 AI 从 100 个公司名里抽
 
 反馈：对手榜里全是 `AI-01` … `AI-50`，看着像测试数据，不像在跟 50 家航司抢客源。

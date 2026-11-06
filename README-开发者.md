@@ -219,7 +219,8 @@ boot            启动选择：进程启动并恢复自动存档时为 {day,name
 ## 6. 测试
 
 ```bash
-python sim/selftest.py          # 67 条内核验收（FR 编号对齐需求文档）
+python sim/selftest.py          # 79 条内核验收（FR 编号对齐需求文档）
+python tools/server_check.py    #  8 条后端冒烟：启动、保存并重启（退出码 42）、保存并退出
 node tools/asset_check.js       #  5 条：前端资源引用、加载顺序、语法、重名、顶层语句
 node tools/map_check.js         # 31 条：地图几何、分级、标签避让、大圆、日界线、开线焦点
 node tools/goal_check.js        #  8 条：目标/模式面板与 /api/new_game 开局
@@ -228,7 +229,11 @@ node tools/route_gui_check.js   # 10 条：开线手势（右键起点 / 左键�
 python -m compileall -q server sim calibration
 ```
 
-当前记录：`67/67`、`5/5`、`31/31`、`8/8`、`23/23`、`10/10`，`compileall` 退出码 0。
+当前记录：`79/79`、`8/8`、`5/5`、`31/31`、`8/8`、`23/23`、`10/10`，`compileall` 退出码 0。
+
+`server_check.py` 会真起一个后端进程（不 mock），因为「保存并重启」这类路径只有跑起来才暴露
+——`app.py` 曾经漏了 `import sys`，内核与前端检查全绿，但一点那个按钮就是 NameError。
+它用 `AIRLINE_SIM_SAVES` 把存档目录指到仓库内的临时目录，**不会覆盖 `saves/autosave.json`**。
 
 ### 前端测试怎么工作
 
@@ -338,7 +343,8 @@ python -m compileall -q server sim calibration
 - 只由本机同版本前端访问后端；输入来自可信玩家
 - 不做鉴权、限流、CSRF、跨进程存档锁、字段级 schema 校验
 - `/api/command` 收到非数字的 `daily_flights`/`price_index`/`amount` 时，可能直接结束请求
-- 多个端口同时读写同一个 `saves/` 没有加锁，测试请用副本或独立目录
+- 多个端口同时读写同一个 `saves/` 没有加锁：测试或开多份对局时用
+  `AIRLINE_SIM_SAVES=<目录>` 把存档指到别处（`tools/server_check.py` 就是这么做的）
 - 后端只绑 `127.0.0.1`，静态文件服务有目录穿越防护（`Path.relative_to` 校验）
 
 产品化优先级：参数类型校验与统一错误响应 → 鉴权/限流 → 存档并发与原子写 → 反向代理。

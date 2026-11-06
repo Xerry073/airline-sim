@@ -80,7 +80,7 @@ web/              前端（零构建，纯静态）
   data/world.geo.json  内置陆地轮廓
 
 calibration/      系数表与机场数据（params.json、airports.csv、calibrate.py）
-tools/            测试脚本（asset/map/goal/panel/route_gui_check.js）与打包脚本
+tools/            测试脚本（asset/map/goal/panel/route_gui_check.js、server_check.py）与打包脚本
 docs/             需求文档、规则边界
 saves/            存档（运行时生成，不入库）
 ```
@@ -97,6 +97,7 @@ python server/supervisor.py --port 8777 --ai 10 --day-seconds 0.5 --speed 4
 
 ```bash
 python sim/selftest.py
+python tools/server_check.py
 node tools/asset_check.js
 node tools/map_check.js
 node tools/goal_check.js
