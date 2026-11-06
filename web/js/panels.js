@@ -395,8 +395,9 @@ function renderFleetOp(){
   const rows=fleet.map(a=>{
     const t=aircraftOf(a.type);
     return `<tr><td>${t?t.name:a.type}</td><td>${a.age.toFixed(1)}</td><td>${a.base||"—"}</td>
-      <td>${a.lease?"租赁":"自有"}</td><td>¥${acResale(a).toFixed(0)}M</td>
-      <td><button class="mini danger" data-sell="${a.id}">出售</button></td></tr>`;
+      <td>${a.lease?"租赁":"自有"}</td>
+      <td>${a.lease?"退押金":"¥"+acResale(a).toFixed(0)+"M"}</td>
+      <td><button class="mini ${a.lease?"":"danger"}" data-sell="${a.id}">${a.lease?"退租":"出售"}</button></td></tr>`;
   }).join("")||'<tr><td colspan="6" style="color:#78899c">暂无飞机</td></tr>';
   const baseOpts=airportOptions(hubs[0]||"");
   /* 运力按机型分池：每架 16 h / 8 段，各机型之间不能互相借用 */
@@ -415,7 +416,7 @@ function renderFleetOp(){
   $("#opbody").innerHTML=`
     <div class="sectionline"><span>现有机队</span><span>${fleet.length} 架</span></div>
     ${capRows}
-    <div class="fleetlist"><table><thead><tr><th>机型</th><th>机龄</th><th>基地</th><th>方式</th><th>出售可得</th><th></th></tr></thead>
+    <div class="fleetlist"><table><thead><tr><th>机型</th><th>机龄</th><th>基地</th><th>方式</th><th>出手/退租</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table></div>
     <div class="opcard" style="margin-top:12px">
       <h4>购入 / 租赁 <span>自有飞机按目录价扣现金；租赁先付押金</span></h4>
@@ -464,9 +465,17 @@ function renderFleetOp(){
   $("#opbody").querySelectorAll("[data-sell]").forEach(b=>{
     b.onclick=async()=>{
       const a=fleet.find(x=>String(x.id)===b.dataset.sell);
-      if(!a||!confirm(`确认出售 ${a.type}（编号 ${a.id}）？预计回笼 ¥${acResale(a).toFixed(0)}M`)) return;
+      if(!a) return;
+      const ask=a.lease
+        ? `确认退租 ${a.type}（编号 ${a.id}）？押金退回，但 ${a.base||"该基地"} 的 ${a.type} 运力会减少`
+        : `确认出售 ${a.type}（编号 ${a.id}）？预计回笼 ¥${acResale(a).toFixed(0)}M`;
+      if(!confirm(ask)) return;
       const res=await api("/api/command",{action:"sell_aircraft",args:{aircraft_id:a.id}});
-      if(res.ok){ toast(`已出售，回笼 ¥${Number(res.cash).toFixed(0)}M`); await refresh(); renderFleetOp(); }
+      if(res.ok){
+        toast(a.lease?`已退租，退还押金 ¥${Number(res.cash).toFixed(1)}M`
+                     :`已出售，回笼 ¥${Number(res.cash).toFixed(0)}M`);
+        await refresh(); renderFleetOp();
+      }
     };
   });
 

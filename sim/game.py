@@ -404,9 +404,27 @@ class Game:
             a = next((x for x in p.fleet if x.id == aid), None)
             if not a:
                 return {"ok": False, "reason": "飞机不存在"}
+            # 卖掉/退租会减少 (机型, 基地) 运力：不允许把已经在飞的池子吃穿
+            key = (a.type, a.base or "")
+            ex0 = p.excess_by_base()
+            p.fleet.remove(a)
+            ex1 = p.excess_by_base()
+            p.fleet.append(a)
+            if ex1[0] > ex0[0] + 1e-9 or ex1[1] > ex0[1] + 1e-9:
+                used_h, used_s = p.usage_by_base()
+                cap_h, cap_s = p.base_capacity(*key)
+                return {"ok": False, "reason": (
+                    f"{key[1] or '—'} 的 {a.type} 运力会被吃穿："
+                    f"已占 {used_h.get(key, 0):.1f}/{cap_h:.0f} h、"
+                    f"{used_s.get(key, 0):.0f}/{cap_s:.0f} 段；"
+                    f"先给这个基地的航线减班或关线")}
+            if a.lease:
+                got = p.return_lease(a)
+                self.log_event("飞机退租", f"{a.type}（{key[1] or '—'}），退还押金 {got:.2f} ¥M")
+                return {"ok": True, "cash": got, "kind": "return"}
             got = p.sell_aircraft(a)
-            self.log_event("出售飞机", f"{a.type}，回笼 {got:.0f} ¥M")
-            return {"ok": True, "cash": got}
+            self.log_event("出售飞机", f"{a.type}（{key[1] or '—'}），回笼 {got:.1f} ¥M")
+            return {"ok": True, "cash": got, "kind": "sell"}
 
         if action == "take_loan":
             amt = float(args.get("amount", 0))
@@ -654,6 +672,7 @@ class Game:
                 "id": a.id, "type": a.type, "age": a.age, "lease": a.lease,
                 "base": a.base, "hours_today": a.hours_today,
                 "segments_today": a.segments_today,
+                "deposit": getattr(a, "deposit", 0.0),
             }
 
         def airline_data(al):
@@ -779,7 +798,8 @@ class Game:
                     raise ValueError(f"存档中的机型不存在：{fd.get('type')}")
                 ac = Aircraft(fd["type"], age=float(fd.get("age", 0.0)),
                               lease=bool(fd.get("lease", False)),
-                              base=fd.get("base"))
+                              base=fd.get("base"),
+                              deposit=float(fd.get("deposit", 0.0) or 0.0))
                 ac.id = int(fd.get("id", ac.id))
                 max_ac_id = max(max_ac_id, ac.id)
                 ac.hours_today = float(fd.get("hours_today", 0.0))

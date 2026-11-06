@@ -283,5 +283,11 @@ const mine = {
     "航线面板显示该基地的机型运力池，机队面板提供调机入口");
 }
 
+// 15) 租赁机在机队面板里是「退租」而不是「出售」
+{
+  check(/a\.lease\?"退租":"出售"/.test(panelsSrc) && /退押金/.test(panelsSrc),
+    "机队面板对租赁机显示退租与押金，而不是出售价");
+}
+
 console.log("\n" + (failed ? "FAILED" : "OK") + "  " + passed + " passed, " + failed + " failed");
 process.exit(failed ? 1 : 0);

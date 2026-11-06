@@ -141,13 +141,14 @@ class World:
 class Aircraft:
     _next = 1
 
-    def __init__(self, ac_type, age=0.0, lease=False, base=None):
+    def __init__(self, ac_type, age=0.0, lease=False, base=None, deposit=0.0):
         self.id = Aircraft._next
         Aircraft._next += 1
         self.type = ac_type
         self.age = age
         self.lease = lease
         self.base = base          # 基地机场：决定是否享受 HUB 成本乘数（FR-502）
+        self.deposit = deposit    # 租赁押金：退租时原额退还（费率变动不影响老合同）
         self.hours_today = 0.0
         self.segments_today = 0
         self.airline = None
@@ -281,19 +282,32 @@ class Airline:
                 return None
             self.cash -= cost
         ac = Aircraft(code, age=age, lease=lease,
-                      base=base or (self.hubs[0] if self.hubs else None))
+                      base=base or (self.hubs[0] if self.hubs else None),
+                      deposit=deposit if lease else 0.0)
         ac.airline = self
         self.fleet.append(ac)
         return ac
 
+    def lease_deposit(self, ac_type):
+        """租赁押金（与买入时同一口径：3 个月租金）"""
+        return self.world.ac(ac_type)["price"] * ECON["lease_rate_month"] * 3
+
     def sell_aircraft(self, ac):
-        """按市价 85% 立即出售回笼现金（§7.2）"""
+        """自有飞机：按市价 85% 立即出售回笼现金（§7.2）"""
         t = self.world.ac(ac.type)
         mv = t["price"] * max(0.10, 1 - 0.065 * ac.age - 0.0015 * ac.age ** 2)
         self.cash += mv * 0.85
         if ac in self.fleet:
             self.fleet.remove(ac)
         return mv * 0.85
+
+    def return_lease(self, ac):
+        """租赁飞机：退租，只退押金，不产生二手出售收入（飞机不是自己的）"""
+        deposit = ac.deposit if getattr(ac, "deposit", 0) > 0 else self.lease_deposit(ac.type)
+        self.cash += deposit
+        if ac in self.fleet:
+            self.fleet.remove(ac)
+        return deposit
 
     def close_route(self, r):
         if r in self.routes:

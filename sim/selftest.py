@@ -508,6 +508,28 @@ def main():
           and [r["rank"] for r in rivals5] == list(range(2, 22)),
           str([r.get("rank") for r in rivals5][:3]))
 
+    # ---------- 卖机 / 退租的运力约束 ----------
+    g9 = S.Game(n_ai=0, with_player=True, seed=15)
+    g9.apply("open_route", {"segments": ["PEK", "SHA"], "daily_flights": 2,
+                            "ac_type": "A320"})
+    only_id = g9.player.fleet[0].id
+    r_sell = g9.apply("sell_aircraft", {"aircraft_id": only_id})
+    check("UI-08", "有航线在飞时不能卖掉唯一一架该基地的飞机",
+          not r_sell.get("ok") and "运力会被吃穿" in str(r_sell.get("reason")),
+          str(r_sell))
+
+    g10 = S.Game(n_ai=0, with_player=True, seed=16)
+    lease = g10.apply("buy_aircraft", {"ac_type": "E190", "base": "PEK", "lease": True})
+    lid = lease.get("aircraft_id")
+    cash_before = g10.player.cash
+    deposit = g10.player.lease_deposit("E190")
+    r_ret = g10.apply("sell_aircraft", {"aircraft_id": lid})
+    check("UI-08", "租赁机是退租而不是出售：只退押金，不产生二手收入",
+          r_ret.get("ok") and r_ret.get("kind") == "return"
+          and abs((g10.player.cash - cash_before) - deposit) < 1e-6
+          and not any(a.id == lid for a in g10.player.fleet),
+          f"{r_ret} / 押金 {deposit:.2f} / 现金变化 {g10.player.cash - cash_before:.2f}")
+
     # ---------- 存档 / 读档 ----------
     g4 = S.Game(n_ai=2, with_player=True, seed=21)
     g4.apply("open_route", {"segments": ["PEK", "SHA"],
