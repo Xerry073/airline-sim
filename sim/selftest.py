@@ -454,19 +454,21 @@ def main():
           not r_runway.get("ok") and "跑道等级" in str(r_runway.get("reason")),
           str(r_runway))
 
-    # 机场 × 机型双维度：飞机在哪个机场，就只能从那里起飞（否则等于瞬移）
-    r_far = g8.apply("open_route", {"segments": ["SHA", "PEK"],
-                                    "daily_flights": 1, "ac_type": "E190"})
-    check("UI-07", "基地不在 SHA 时不能在 SHA 开线",
-          not r_far.get("ok") and "SHA 的 E190" in str(r_far.get("reason")), str(r_far))
-    # 先租一架闲置的 E190（前面那架已经在飞 PEK 航线，不能调走）
-    fresh = g8.apply("buy_aircraft", {"ac_type": "E190", "base": "PEK", "lease": True})
-    e_id = fresh.get("aircraft_id")
-    r_rb = g8.apply("rebase_aircraft", {"aircraft_id": e_id, "base": "SHA"})
-    r_after = g8.apply("open_route", {"segments": ["SHA", "PEK"],
-                                      "daily_flights": 1, "ac_type": "E190"})
-    check("UI-07", "调机到 SHA 后可以在 SHA 开线",
-          r_rb.get("ok") and r_after.get("ok"), str(r_rb) + " / " + str(r_after))
+    # 连通分量：与基地连通的航线可以由同一架飞机串飞（KMG 不必驻扎飞机）
+    g11 = S.Game(n_ai=0, with_player=True, seed=21)
+    g11.apply("buy_aircraft", {"ac_type": "A320", "base": "XIY", "lease": True})
+    r1 = g11.apply("open_route", {"segments": ["XIY", "KMG"],
+                                  "daily_flights": 1, "ac_type": "A320"})
+    r2 = g11.apply("open_route", {"segments": ["KMG", "DEL"],
+                                  "daily_flights": 1, "ac_type": "A320"})
+    check("UI-07", "KMG 不驻扎飞机也能开线：与基地连通即可串飞",
+          r1.get("ok") and r2.get("ok"), str(r1) + " / " + str(r2))
+    g12 = S.Game(n_ai=0, with_player=True, seed=22)
+    r_iso = g12.apply("open_route", {"segments": ["CAN", "KMG"],
+                                     "daily_flights": 1, "ac_type": "A320"})
+    check("UI-07", "与任何基地都不连通的航线组不能开线",
+          not r_iso.get("ok") and "这组的 A320" in str(r_iso.get("reason")),
+          str(r_iso))
 
     # ---------- AI 公开航线网络 ----------
     g3 = S.Game(n_ai=3, with_player=True, seed=11)

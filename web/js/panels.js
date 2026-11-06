@@ -226,7 +226,8 @@ function renderRouteOp(){
   const costs=(STATE.player&&STATE.player.costs)||null;
   const cap=(STATE.player&&STATE.player.capacity)||{};
   const utilPct=cap.hours_cap?Math.round(100*cap.hours_used/cap.hours_cap):null;
-  const typeCap=((cap.pools)||[]).find(x=>x.type===r.ac_type&&x.base===r.segments[0])||null;
+  const typeCap=((cap.pools)||[]).find(x=>x.type===r.ac_type
+    && (x.airports||[]).includes(r.segments[0]))||null;
   const gap=costs?profitSum-costs.fixed_total:null;
   const fixedCard=!costs
     ? `<div class="opcard"><h4>公司固定开销 <span>待结算</span></h4>
@@ -291,7 +292,7 @@ function renderRouteOp(){
         <select id="acsel">${acOpts}</select>
       </div>
       <div class="btnrow"><button id="acsave">更换机型</button><span class="hintline" id="achint"></span></div>
-      ${typeCap?`<div class="hintline">${typeCap.base} 的 ${typeCap.type} 运力 ${typeCap.hours_used}/${typeCap.hours_cap} h · 航段 ${typeCap.segments_used}/${typeCap.segments_cap}${typeCap.over?"（超载）":""}</div>`:""}
+      ${typeCap?`<div class="hintline">${(typeCap.airports||[]).join("/")} 这组的 ${typeCap.type} 运力 ${typeCap.hours_used}/${typeCap.hours_cap} h · 航段 ${typeCap.segments_used}/${typeCap.segments_cap}${typeCap.over?"（超载）":""}</div>`:""}
       <div class="hintline">换机型不买卖飞机：新机型必须在机队里已有，航程/跑道/日占机由后端校验。</div>
     </div>
     <div class="btnrow"><button class="danger" id="rclose">关闭这条航线</button><span class="hintline">关闭后时刻释放，不可撤销</span></div>`;
@@ -406,8 +407,8 @@ function renderFleetOp(){
     const t=aircraftOf(b.type);
     const pct=b.hours_cap?Math.round(100*b.hours_used/b.hours_cap):0;
     const cls=b.over?"neg":(pct>=85?"warn":(pct>0?"pos":""));
-    const base=b.base||"—";
-    return `<div class="req"><span>${t?t.name:b.type} @ ${base} × ${b.count}</span>
+    const where=(b.airports||[]).join("/")||"—";
+    return `<div class="req"><span>${t?t.name:b.type} @ ${where} × ${b.count}</span>
       <b class="${cls}">${b.hours_used}/${b.hours_cap} h（${pct}%）· 航段 ${b.segments_used}/${b.segments_cap}${b.over?" · 超载":""}</b></div>`;
   }).join("");
   const acSelect=fleet.map(a=>`<option value="${a.id}">#${a.id} ${a.type} @ ${a.base||"—"}</option>`).join("")
@@ -435,7 +436,7 @@ function renderFleetOp(){
         <div class="field" style="margin:0"><label>新基地</label><select id="rb_base">${airportOptions("")}</select></div>
       </div>
       <div class="btnrow"><button id="rb_go">调机</button>
-        <span class="hintline" id="rb_hint">一架飞机一天只能从一个机场起飞；想在新机场开线，先把飞机调过去。</span></div>
+        <span class="hintline" id="rb_hint">航线要能连成一条闭合的航段链；同一连通块里的航线可由块内基地的飞机串飞，跨块就得调机。</span></div>
     </div>`;
 
   const updateBuy=()=>{

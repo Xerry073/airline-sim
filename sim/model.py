@@ -405,44 +405,80 @@ class Airline:
         return (self.total_hours() + self.route_hours(r) <= self.capacity_hours()
                 and self.total_segments() + self.route_segments_needed(r) <= self.capacity_segments())
 
-    # ---------- 按「机型 + 出发机场」分池的运力 ----------
-    # 一架飞机一天只能从一个机场起飞，航线又都是往返，所以运力池是 (机型, 飞机基地)：
-    # A320@PEK 的 16 h 不能给 A320@SHA 的航线用，更不能给 E190 用；
-    # 想在别的机场开线，得先调机（rebase_aircraft）把飞机挪过去。
+    # ---------- 按机型 + 连通分量分池的运力 ----------
+    # 一架飞机一天只能飞一条连续的航段链：A→B→C→A 是合法的转一圈，
+    # 但从 PEK 飞 SHA 再飞 KMG 就必须有 SHA→KMG 的航段把链子接上。
+    # 因此把航段看成无向图的边，连通分量就是一个「同一架飞机能串飞」的组；
+    # 每组的上限是 16 h × 组内机场驻扎的该机型飞机数。
+    # 这样 XIY-DEL、XIY-KMG、KMG-DEL 三条线可以被一架 XIY 的飞机串起来，
+    # 而一条孤立的 KMG-DEL 则必须有一架停在 KMG 的飞机。
 
-    def base_capacity(self, ac_type, base):
-        """该 (机型, 基地) 池的 (日占机上限, 日航段上限)"""
-        n = sum(1 for a in self.fleet
-                if a.type == ac_type and (a.base or "") == (base or ""))
-        return FLIGHT["max_hours_per_day"] * n, FLIGHT["max_segments_per_day"] * n
+    def components(self, ac_type):
+        """按机型把航线按航段连通性分组：root -> {hours, segs, cap_h, cap_s, airports}"""
+        parent = {}
 
-    def usage_by_base(self):
-        """按 (机型, 航线出发机场) 汇总已占用 (小时, 航段)"""
-        hours, segs = {}, {}
-        for r in self.routes:
-            key = (r.ac_type, r.segments[0])
-            hours[key] = hours.get(key, 0.0) + self.route_hours(r)
-            segs[key] = segs.get(key, 0) + self.route_segments_needed(r)
-        return hours, segs
+        def find(x):
+            parent.setdefault(x, x)
+            root = x
+            while parent[root] != root:
+                root = parent[root]
+            while parent[x] != root:
+                parent[x], x = root, parent[x]
+            return root
 
-    def excess_by_base(self):
+        def union(a, b):
+            ra, rb = find(a), find(b)
+            if ra != rb:
+                parent[rb] = ra
+
+        routes = [r for r in self.routes if r.ac_type == ac_type]
+        for r in routes:
+            for i in range(len(r.segments) - 1):
+                union(r.segments[i], r.segments[i + 1])
+        for a in self.fleet:
+            if a.type == ac_type and a.base:
+                find(a.base)
+
+        groups = {}
+        for r in routes:
+            root = find(r.segments[0])
+            g = groups.setdefault(root, {"hours": 0.0, "segs": 0,
+                                         "cap_h": 0.0, "cap_s": 0, "airports": set()})
+            g["hours"] += self.route_hours(r)
+            g["segs"] += self.route_segments_needed(r)
+            g["airports"].update(r.segments)
+        for a in self.fleet:
+            if a.type != ac_type or not a.base:
+                continue
+            root = find(a.base)
+            g = groups.setdefault(root, {"hours": 0.0, "segs": 0, "cap_h": 0.0,
+                                         "cap_s": 0, "airports": set()})
+            g["airports"].add(a.base)
+            g["cap_h"] += FLIGHT["max_hours_per_day"]
+            g["cap_s"] += FLIGHT["max_segments_per_day"]
+        return groups
+
+    def excess_by_component(self, ac_type=None):
         """超出上限的 (小时, 航段) 合计；用于「允许补救、禁止恶化」的变更校验"""
-        hours, segs = self.usage_by_base()
-        keys = set(hours) | {(a.type, a.base or "") for a in self.fleet}
+        types = [ac_type] if ac_type else sorted({r.ac_type for r in self.routes}
+                                                | {a.type for a in self.fleet})
         ex_h = ex_s = 0.0
-        for key in keys:
-            cap_h, cap_s = self.base_capacity(*key)
-            ex_h += max(0.0, hours.get(key, 0.0) - cap_h)
-            ex_s += max(0.0, segs.get(key, 0) - cap_s)
+        for t in types:
+            for g in self.components(t).values():
+                ex_h += max(0.0, g["hours"] - g["cap_h"])
+                ex_s += max(0.0, g["segs"] - g["cap_s"])
         return ex_h, ex_s
 
     def fits_route(self, r):
-        """把航线 r 放进机队是否还装得下（按 r 的机型与出发机场分池，r 不要求在 routes 里）"""
-        hours, segs = self.usage_by_base()
-        key = (r.ac_type, r.segments[0])
-        cap_h, cap_s = self.base_capacity(*key)
-        return (hours.get(key, 0.0) + self.route_hours(r) <= cap_h + 1e-9
-                and segs.get(key, 0) + self.route_segments_needed(r) <= cap_s + 1e-9)
+        """把航线 r 加进来后，该机型的所有连通分量是否都不超载"""
+        if r in self.routes:
+            raise ValueError("fits_route 需要一条尚未加入 routes 的航线")
+        self.routes.append(r)
+        try:
+            ex_h, ex_s = self.excess_by_component(r.ac_type)
+        finally:
+            self.routes.remove(r)
+        return ex_h <= 1e-9 and ex_s <= 1e-9
 
 
     def can_cover(self, r):

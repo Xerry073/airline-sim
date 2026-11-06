@@ -216,11 +216,8 @@ def ai_decide(world, al, rng, params):
         if r.lf_ewma > 0.85 and r.daily_flights < 14:
             saved = r.daily_flights
             r.daily_flights += 1
-            key = (r.ac_type, r.segments[0])
-            hours, segs = al.usage_by_base()
-            cap_h, cap_s = al.base_capacity(*key)
-            over = (hours.get(key, 0.0) > cap_h + 1e-9
-                    or segs.get(key, 0) > cap_s + 1e-9)
+            over = al.excess_by_component(r.ac_type)[0] > 1e-9 \
+                or al.excess_by_component(r.ac_type)[1] > 1e-9
             if over:
                 if not (al.cash >= world.ac(r.ac_type)["price"] * 1.6 and al.buy_aircraft(r.ac_type)):
                     r.daily_flights = saved

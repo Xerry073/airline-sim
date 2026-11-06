@@ -40,23 +40,33 @@ def reclaim_stale_slots(world, airlines):
 
 
 def capacity_pools(airline):
-    """按 (机型, 基地) 汇总运力占用：每架 16 h / 8 段，机型与基地都不共用。"""
-    used_h, used_s = airline.usage_by_base()
-    keys = set(used_h) | {(a.type, a.base or "") for a in airline.fleet}
+    """按 (机型, 连通分量) 汇总运力占用：同组的航线可以由组内基地的飞机串飞。"""
     rows = []
-    for ac_type, base in sorted(keys):
-        cap_h, cap_s = airline.base_capacity(ac_type, base)
-        rows.append({
-            "type": ac_type, "base": base,
-            "count": sum(1 for a in airline.fleet
-                         if a.type == ac_type and (a.base or "") == base),
-            "hours_used": round(used_h.get((ac_type, base), 0.0), 1),
-            "hours_cap": round(cap_h, 1),
-            "segments_used": used_s.get((ac_type, base), 0), "segments_cap": cap_s,
-            "over": (used_h.get((ac_type, base), 0.0) > cap_h + 1e-9
-                     or used_s.get((ac_type, base), 0) > cap_s),
-        })
+    types = sorted({r.ac_type for r in airline.routes}
+                   | {a.type for a in airline.fleet})
+    for ac_type in types:
+        for g in airline.components(ac_type).values():
+            rows.append({
+                "type": ac_type,
+                "airports": sorted(g["airports"]),
+                "count": sum(1 for a in airline.fleet
+                             if a.type == ac_type and a.base in g["airports"]),
+                "hours_used": round(g["hours"], 1), "hours_cap": round(g["cap_h"], 1),
+                "segments_used": g["segs"], "segments_cap": g["cap_s"],
+                "over": g["hours"] > g["cap_h"] + 1e-9 or g["segs"] > g["cap_s"],
+            })
     return rows
+
+
+def pool_for_route(airline, r):
+    """把 r 临时算进来，返回 r 所在连通分量的占用行（用于报错提示）"""
+    airline.routes.append(r)
+    try:
+        pools = capacity_pools(airline)
+    finally:
+        airline.routes.remove(r)
+    return next((x for x in pools
+                 if x["type"] == r.ac_type and r.segments[0] in x["airports"]), None)
 
 
 
@@ -236,14 +246,17 @@ class Game:
             r = Route(p, segs, flights, ac, 0.97)
             # 运力按机型分池：E190 空闲的时间不能给 A320 航线用
             if not p.fits_route(r):
-                key = (ac, segs[0])
-                used_h, used_s = p.usage_by_base()
-                cap_h, cap_s = p.base_capacity(*key)
+                pool = pool_for_route(p, r)
+                where = "/".join(pool["airports"]) if pool else segs[0]
+                used_h = pool["hours_used"] if pool else 0.0
+                cap_h = pool["hours_cap"] if pool else 0.0
+                used_s = pool["segments_used"] if pool else 0
+                cap_s = pool["segments_cap"] if pool else 0
                 return {"ok": False, "reason": (
-                    f"{segs[0]} 的 {ac} 运力不足：已占 {used_h.get(key, 0):.1f}/{cap_h:.0f} h、"
-                    f"{used_s.get(key, 0):.0f}/{cap_s:.0f} 段，本次需要 "
+                    f"{where} 这组的 {ac} 运力不足：已占 {used_h:.1f}/{cap_h:.0f} h、"
+                    f"{used_s}/{cap_s} 段，本次需要 "
                     f"{p.route_hours(r):.1f} h / {p.route_segments_needed(r)} 段；"
-                    f"可以从别处调机、换机型或再买一架 {ac}（基地 {segs[0]}）")}
+                    f"可以调机到该组机场、换机型或再买一架 {ac}")}
             # FR-403：每机场占用 2 × 触及航段数 × daily_flights
             touches = slot_touches(segs)
             slot_need = {}
@@ -288,18 +301,17 @@ class Game:
             if not (1 <= n <= 14):
                 return {"ok": False, "reason": "班次须在 1–14 之间"}
             old = r.daily_flights
-            key = (r.ac_type, r.segments[0])
-            ex0 = p.excess_by_base()
+            ex0 = p.excess_by_component()
             r.daily_flights = n
-            ex1 = p.excess_by_base()
+            ex1 = p.excess_by_component()
             if ex1[0] > ex0[0] + 1e-9 or ex1[1] > ex0[1] + 1e-9:
                 r.daily_flights = old
-                used_h, used_s = p.usage_by_base()
-                cap_h, cap_s = p.base_capacity(*key)
+                pool = pool_for_route(p, r)
+                where = "/".join(pool["airports"]) if pool else r.segments[0]
                 return {"ok": False, "reason": (
-                    f"{key[1]} 的 {r.ac_type} 运力不足：已占 "
-                    f"{used_h.get(key, 0):.1f}/{cap_h:.0f} h、"
-                    f"{used_s.get(key, 0):.0f}/{cap_s:.0f} 段，请先购机或减班")}
+                    f"{where} 这组的 {r.ac_type} 运力不足：已占 "
+                    f"{pool['hours_used']:.1f}/{pool['hours_cap']:.0f} h、"
+                    f"{pool['segments_used']}/{pool['segments_cap']} 段，请先购机或减班")}
             return {"ok": True, "daily_flights": n}
 
         if action == "set_aircraft":
@@ -332,19 +344,18 @@ class Game:
                         if not runway_allows(w.airports[code], t["class"]):
                             return {"ok": False, "reason": f"{code} 跑道等级不满足 {ac}"}
             old = r.ac_type
-            ex0 = p.excess_by_base()
+            ex0 = p.excess_by_component()
             r.ac_type = ac
-            ex1 = p.excess_by_base()
+            ex1 = p.excess_by_component()
             # 换更慢/过站更久的机型可能吃穿该机型的运力
             if ex1[0] > ex0[0] + 1e-9 or ex1[1] > ex0[1] + 1e-9:
                 r.ac_type = old
-                key = (ac, r.segments[0])
-                used_h, used_s = p.usage_by_base()
-                cap_h, cap_s = p.base_capacity(*key)
+                pool = pool_for_route(p, r)
+                where = "/".join(pool["airports"]) if pool else r.segments[0]
                 return {"ok": False, "reason": (
-                    f"{key[1]} 的 {ac} 运力不足：换机后该池已占 "
-                    f"{used_h.get(key, 0):.1f}/{cap_h:.0f} h、"
-                    f"{used_s.get(key, 0):.0f}/{cap_s:.0f} 段")}
+                    f"{where} 这组的 {ac} 运力不足：换机后已占 "
+                    f"{pool['hours_used']:.1f}/{pool['hours_cap']:.0f} h、"
+                    f"{pool['segments_used']}/{pool['segments_cap']} 段")}
             self.log_event("更换机型", f"#{r.rid} {'→'.join(r.segments)} {old} → {ac}")
             return {"ok": True, "ac_type": ac, "changed": True}
 
@@ -364,9 +375,9 @@ class Game:
             fee = round(d / 1000.0 * 0.25 * (t["mtow"] / 70.0), 2)
             if p.cash < fee:
                 return {"ok": False, "reason": f"调机费 {fee:.2f} ¥M，现金不足"}
-            ex0 = p.excess_by_base()
+            ex0 = p.excess_by_component()
             a.base = base
-            ex1 = p.excess_by_base()
+            ex1 = p.excess_by_component()
             if ex1[0] > ex0[0] + 1e-9 or ex1[1] > ex0[1] + 1e-9:
                 a.base = old_base
                 return {"ok": False,
@@ -405,25 +416,19 @@ class Game:
             if not a:
                 return {"ok": False, "reason": "飞机不存在"}
             # 卖掉/退租会减少 (机型, 基地) 运力：不允许把已经在飞的池子吃穿
-            key = (a.type, a.base or "")
-            ex0 = p.excess_by_base()
+            ex0 = p.excess_by_component()
             p.fleet.remove(a)
-            ex1 = p.excess_by_base()
+            ex1 = p.excess_by_component()
             p.fleet.append(a)
             if ex1[0] > ex0[0] + 1e-9 or ex1[1] > ex0[1] + 1e-9:
-                used_h, used_s = p.usage_by_base()
-                cap_h, cap_s = p.base_capacity(*key)
                 return {"ok": False, "reason": (
-                    f"{key[1] or '—'} 的 {a.type} 运力会被吃穿："
-                    f"已占 {used_h.get(key, 0):.1f}/{cap_h:.0f} h、"
-                    f"{used_s.get(key, 0):.0f}/{cap_s:.0f} 段；"
-                    f"先给这个基地的航线减班或关线")}
+                    f"卖掉/退租后 {a.type} 的运力会被吃穿：先给该组航线减班或关线")}
             if a.lease:
                 got = p.return_lease(a)
-                self.log_event("飞机退租", f"{a.type}（{key[1] or '—'}），退还押金 {got:.2f} ¥M")
+                self.log_event("飞机退租", f"{a.type}（{a.base or '—'}），退还押金 {got:.2f} ¥M")
                 return {"ok": True, "cash": got, "kind": "return"}
             got = p.sell_aircraft(a)
-            self.log_event("出售飞机", f"{a.type}（{key[1] or '—'}），回笼 {got:.1f} ¥M")
+            self.log_event("出售飞机", f"{a.type}（{a.base or '—'}），回笼 {got:.1f} ¥M")
             return {"ok": True, "cash": got, "kind": "sell"}
 
         if action == "take_loan":
