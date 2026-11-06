@@ -241,6 +241,13 @@ function renderPublicRouteOp(){
   const contested=routeIsContested(r.segments||[],playerMarkets,AP);
   const rivalMarkets=routeMarketSet([r],AP);
   const overlaps=playerRoutes.filter(pr=>routeIsContested(pr.segments||[],rivalMarkets,AP));
+  const prices=Array.isArray(r.prices)?r.prices:[];
+  const idx=Number(r.price_index);
+  const fareRows=prices.map(p=>{
+    const eco=Number(p.eco)||0, biz=Number(p.biz)||0;
+    return `<div class="req"><span>${escHTML(p.from||"")} → ${escHTML(p.to||"")}</span>
+        <b>经济 ¥${eco.toLocaleString("zh-CN")} · 商务 ¥${biz.toLocaleString("zh-CN")}</b></div>`;
+  }).join("");
   $("#opbody").innerHTML=`
     <div class="marketbox">
       <div class="sectionline"><span>${escHTML((r.segments||[]).join(" → "))}</span>
@@ -251,15 +258,17 @@ function renderPublicRouteOp(){
         <span>机型 <b>${escHTML(r.ac_type||"—")}</b></span>
         <span>每日班次 <b>${r.daily_flights||"—"}</b></span>
         <span>载客率 <b>${Number.isFinite(r.lf)?(r.lf*100).toFixed(0)+"%":"—"}</b></span>
-        <span>公开信息 <b>航段 / 班次 / 载客率</b></span>
+        <span>价格指数 <b>${Number.isFinite(idx)?idx.toFixed(2):"—"}</b></span>
       </div>
     </div>
+    <div class="sectionline"><span>公开票价</span><span>参考价 × 价格指数</span></div>
+    ${fareRows||'<div class="empty">这条航线暂未公开票价</div>'}
     <div class="sectionline"><span>与我的航线关系</span><span>${overlaps.length} 条重叠</span></div>
     ${overlaps.length
       ? overlaps.map(pr=>`<div class="req"><span>#${pr.id} ${escHTML((pr.segments||[]).join(" → "))}</span>
           <b class="warn">共享市场</b></div>`).join("")
       : '<div class="empty">这条 AI 航线目前与你的航线没有共享城市市场。</div>'}
-    <div class="hintline" style="margin-top:10px">对手航线只展示公开网络与载客率，不含票价、成本或财务。</div>`;
+    <div class="hintline" style="margin-top:10px">对手航线公开网络、班次、载客率与票价；成本、收入与财务不公开。</div>`;
 }
 
 /* ---------- 机队 ---------- */

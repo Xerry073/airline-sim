@@ -54,7 +54,7 @@
 | `sim/goals.py` | 四目标判定、区域份额、月报质量、A–E 评级 |
 | `sim/game.py` | `Game`：逐日推进、玩家指令、快照、存档序列化 |
 | `sim/report.py` | `run` / `summarize` / `write_report` / CLI |
-| `sim/selftest.py` | 49 条验收自测 |
+| `sim/selftest.py` | 51 条验收自测 |
 | `web/index.html` | 页面结构 + 脚本加载顺序 |
 | `web/css/app.css` | 全部样式 |
 | `web/js/*.js` | 按加载顺序：map → routes → interaction → panels → saves → goals → app |
@@ -190,7 +190,8 @@ player.routes[] {id, segments, daily_flights, ac_type, price_index, lf, rep, pax
 rivals[]        对手榜：市值前 20、**不含本公司**
                  {name, hub, rank, routes, fleet, pax, ebitda, lf, rep, market_cap}
 rivals_total    存活对手总家数（50 AI 时约 49）
-opponent_routes[] 对手公开航线 {airline, hub, segments, daily_flights, ac_type, lf}
+opponent_routes[] 对手公开航线 {airline, hub, segments, daily_flights, ac_type, lf,
+                 price_index, prices[]{from, to, eco, biz}}
 goals           {mode, mode_chosen, setup_required, deadline_day, days_left,
                  years_left, progress[], achieved_count, rating, scored,
                  settled, settlement}
@@ -199,23 +200,24 @@ log[]           最近 40 条事件
 
 - `rivals[].rank` 是**全体存活公司**名次（与 `player.rank` 同口径），过滤自己后会留空档
 - `player.routes[].margin` 是**航线可归集口径**：不含折旧租赁、总部固定费与利息
-- 对手永远看不到精确票价与财务（FR-1002）
+- 对手航线的**票价公开**：`price_index` + 每个 OD 的 `eco`/`biz`，算法与玩家侧一致
+  （`p_ref(OD 两端直线距离, 舱位) × 价格指数`，R-632）；成本、收入与利润仍然不可见（FR-1002）
 
 ---
 
 ## 6. 测试
 
 ```bash
-python sim/selftest.py          # 49 条内核验收（FR 编号对齐需求文档）
+python sim/selftest.py          # 51 条内核验收（FR 编号对齐需求文档）
 node tools/asset_check.js       #  5 条：前端资源引用、加载顺序、语法、重名、顶层语句
 node tools/map_check.js         # 28 条：地图几何、分级、标签避让、大圆、日界线
 node tools/goal_check.js        #  8 条：目标/模式面板与 /api/new_game 开局
-node tools/panel_check.js       #  5 条：对手榜口径（TOP 20/N、名次、空榜、转义）
+node tools/panel_check.js       #  7 条：对手榜口径 + AI 航线公开票价
 node tools/route_gui_check.js   # 10 条：开线手势（右键起点 / 左键终点 / Alt+左键经停）
 python -m compileall -q server sim calibration
 ```
 
-当前记录：`49/49`、`5/5`、`28/28`、`8/8`、`5/5`、`10/10`，`compileall` 退出码 0。
+当前记录：`51/51`、`5/5`、`28/28`、`8/8`、`7/7`、`10/10`，`compileall` 退出码 0。
 
 ### 前端测试怎么工作
 
@@ -302,7 +304,7 @@ python -m compileall -q server sim calibration
 
 1. **后端用标准库 `http.server`，不引框架**：零依赖分发；接口契约与框架无关，换 FastAPI 只改 `api.py`。
 2. **时钟在后端，前端只读**：暂停/加速对所有人一致。
-3. **前后端只通过 JSON 快照通信**：快照是裁剪视图，对手不给票价与财务。
+3. **前后端只通过 JSON 快照通信**：快照是裁剪视图，对手不给成本、收入与财务（票价按公开口径可见）。
 4. **玩家不是 AI 的特例，而是被排除在 AI 决策之外**：`advance_day()` 里 `if al.is_player: continue`。
 5. **存档用显式 JSON，不用 pickle**：可读、可排查、不执行任意反序列化。
 6. **自动存档 + supervisor 负责安全重启**：浏览器无需进程权限，重启不丢对局。

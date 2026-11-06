@@ -103,5 +103,53 @@ function rivals(n, from = 2) {
   check(!/<img/.test(html) && /&lt;img/.test(html), "对手名称做了 HTML 转义");
 }
 
+/* ---------- AI 航线详情：公开票价口径 ---------- */
+const panelsSrc = fs.readFileSync(path.join(root, "web", "js", "panels.js"), "utf8");
+const PUB_START = "function renderPublicRouteOp";
+const PUB_END = "/* ---------- 机队";
+const pubStart = panelsSrc.indexOf(PUB_START);
+const pubEnd = pubStart < 0 ? -1 : panelsSrc.indexOf(PUB_END, pubStart);
+if (pubStart < 0 || pubEnd < 0) {
+  console.error("找不到 renderPublicRouteOp 代码段");
+  process.exit(1);
+}
+const pubBlock = panelsSrc.slice(pubStart, pubEnd);
+
+function renderPublic(route) {
+  const nodes = new Map();
+  const nodeFor = sel => {
+    if (!nodes.has(sel)) nodes.set(sel, { textContent: "", innerHTML: "" });
+    return nodes.get(sel);
+  };
+  const fn = new Function("$", "escHTML", "STATE", "OP", "AP",
+    "routeMarketSet", "routeIsContested",
+    pubBlock + "\n; return renderPublicRouteOp;");
+  fn(nodeFor, escHTML, { player: { routes: [] } }, { publicRoute: route }, {},
+    () => new Set(), () => false)();
+  return nodeFor("#opbody").innerHTML;
+}
+
+const aiRoute = {
+  airline: "AI-25", hub: "SVO", segments: ["PEK", "SVO"], daily_flights: 1,
+  ac_type: "A333", lf: 0.98, price_index: 0.97,
+  prices: [{ from: "PEK", to: "SVO", eco: 3120, biz: 8112 }],
+};
+
+// 6) 详情面板公开价格指数与各 OD 票价
+{
+  const html = renderPublic(aiRoute);
+  check(/价格指数/.test(html) && /0\.97/.test(html)
+    && /经济 ¥3,120/.test(html) && /商务 ¥8,112/.test(html),
+    "AI 航线详情展示价格指数与 OD 经济/商务票价",
+    html.replace(/\s+/g, " ").slice(0, 160));
+}
+
+// 7) 文案改为「票价公开、成本与财务不公开」
+{
+  const html = renderPublic(aiRoute);
+  check(/成本、收入与财务不公开/.test(html) && !/不含票价/.test(html),
+    "AI 航线详情文案：票价公开、成本与财务不公开");
+}
+
 console.log("\n" + (failed ? "FAILED" : "OK") + "  " + passed + " passed, " + failed + " failed");
 process.exit(failed ? 1 : 0);

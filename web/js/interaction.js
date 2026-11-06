@@ -41,6 +41,8 @@ function showRouteTip(r,e,kind,contested){
     <div class="sub">${sub}</div>
     <div class="row"><span>每日班次</span><b>${r.daily_flights}</b></div>
     <div class="row"><span>载客率</span><b>${lf}%</b></div>
+    ${rival&&Number.isFinite(Number(r.price_index))
+      ?`<div class="row"><span>价格指数</span><b>${Number(r.price_index).toFixed(2)}</b></div>`:""}
     ${rival?`<div class="row"><span>竞争状态</span><b class="${contested?"pill":""}">${contested?"与你的市场重叠":"暂无重叠"}</b></div>`
            :`<div class="row"><span>价格指数</span><b>${Number(r.price_index||1).toFixed(2)}</b></div>`}
     <div class="hint">点击打开这条航线的详情</div>`;
