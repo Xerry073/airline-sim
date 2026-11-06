@@ -289,6 +289,17 @@ python -m compileall -q server sim calibration
 
 重新标定：`python calibration/calibrate.py`（需要 numpy）。
 
+改机型时的两条硬约束：
+
+- `name` 只是显示名，前端全部用 `t.name` 渲染，随便改、刷新即生效；现有取值是型号全称
+  （`A320neo`、`B737-800`、`B777-300ER`…），不带「波音 / 空客」这类厂商词。
+- `code` 是**存档标识**：`ac_type` 写在每一局的 `fleet`/`routes` 里，`from_save()` 会拿它校验，
+  直接改名会让老存档报「存档中的机型不存在」。真要改代码，必须同时改
+  `sim/ai.py`（AI 选型三档）、`web/js/panels.js`（默认机型）、`server/session.py`（按机队估班次）、
+  `sim/game.py`（开局送机），并在 `from_save()` 里加一张「旧代码 → 新代码」映射表。
+- `class` 只能是 `支线 / 窄体 / 宽体`：跑道等级（`runway_allows`）与过站时间
+  （`FLIGHT["turnaround_min"]`）都按它判定。
+
 ---
 
 ## 8. 存档格式
