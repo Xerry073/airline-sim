@@ -142,7 +142,7 @@ function renderNewRouteOp(){
     const from=$("#of").value, to=$("#ot").value, stop=$("#os").value;
     if(from===to){ toast("起点和终点不能相同",true); return; }
     if(AP[from]&&AP[to]&&AP[from].city===AP[to].city){ toast("同城机场之间不构成航线",true); return; }
-    const segments=[from,to]; if(stop) segments.push(stop);
+    const segments=stop?[from,stop,to]:[from,to];
     const btn=$("#ogo"); btn.disabled=true;
     const res=await api("/api/command",{action:"open_route",args:{
       segments, daily_flights:Number($("#ofl").value||1), ac_type:$("#oac").value}});
