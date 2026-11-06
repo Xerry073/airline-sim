@@ -37,7 +37,7 @@ function showRouteTip(r,e,kind,contested){
   const sub=rival
     ? `${escHTML(r.airline||"AI")} · ${r.ac_type||""}`
     : `${r.ac_type||""} · 我的航线 #${r.id}`;
-  t.innerHTML=`<div class="t1"><code>${r.segments.join(" → ")}</code></div>
+  t.innerHTML=`<div class="t1"><code>${r.segments.join(" ＝ ")}</code></div>
     <div class="sub">${sub}</div>
     <div class="row"><span>每日班次</span><b>${r.daily_flights}</b></div>
     <div class="row"><span>载客率</span><b>${lf}%</b></div>
@@ -156,7 +156,7 @@ function closeWizard(){ $("#wiz").classList.remove("on"); }
 async function openWizard(segs){
   const w=$("#wiz");
   const stop=segs.length>2?segs[1]:null;
-  const head=`<h3><span>${segs.join(" → ")}</span><span class="x" onclick="clearSelection()">✕</span></h3>`;
+  const head=`<h3><span>${segs.join(" ＝ ")}</span><span class="x" onclick="clearSelection()">✕</span></h3>`;
   w.classList.add("on");
   w.innerHTML=head+`<div class="hint">正在查询市场…</div>`;
 
@@ -177,7 +177,7 @@ async function openWizard(segs){
     const total=legs.reduce((s,x)=>s+x.km,0);
     const direct=Math.round(haversineKm(AP[segs[0]],AP[segs[segs.length-1]]));
     body=`<div class="kv"><span>航段</span><b>${legs.length} 段 · 1 个经停</b></div>
-      ${legs.map(l=>`<div class="kv"><span>${l.from} → ${l.to}</span><b>${l.km} km</b></div>`).join("")}
+      ${legs.map(l=>`<div class="kv"><span>${l.from} ＝ ${l.to}</span><b>${l.km} km</b></div>`).join("")}
       <div class="kv"><span>总航程</span><b>${total} km</b></div>
       <div class="kv"><span>直飞距离</span><b>${direct} km</b></div>
       <div class="kv"><span>绕行系数</span><b>${direct?(total/direct).toFixed(2):"—"}</b></div>

@@ -164,7 +164,7 @@ function renderRouteOp(){
   }
   if(!routes.some(r=>r.id===OP.routeId)) OP.routeId=routes[0].id;
   const r=routes.find(x=>x.id===OP.routeId);
-  const opts=routes.map(x=>`<option value="${x.id}"${x.id===r.id?" selected":""}>#${x.id} ${x.segments.join("→")}</option>`).join("");
+  const opts=routes.map(x=>`<option value="${x.id}"${x.id===r.id?" selected":""}>#${x.id} ${x.segments.join("＝")}</option>`).join("");
   const myMarkets=routeMarketSet([r],AP);
   const contested=routeIsContested(r.segments||[],
     routeMarketSet((STATE&&STATE.opponent_routes)||[],AP),AP);
@@ -200,7 +200,7 @@ function renderRouteOp(){
         ? `<b class="${gap<0?"warn":"pos"}">${gap<0?"低":"高"} ${Math.abs(gap*100).toFixed(0)}%</b>`
         : "";
       return `<div class="hintline" style="margin:-2px 0 6px 12px">
-        ${escHTML(p.from)} → ${escHTML(p.to)}：我 ¥${myEco.toLocaleString("zh-CN")} · 对手 ¥${rEco.toLocaleString("zh-CN")} ${tag}</div>`;
+        ${escHTML(p.from)} ＝ ${escHTML(p.to)}：我 ¥${myEco.toLocaleString("zh-CN")} · 对手 ¥${rEco.toLocaleString("zh-CN")} ${tag}</div>`;
     }).join("");
     /* 没有 OD 票价时（旧后端 / 无重叠 OD）退回价格指数比较 */
     let gapTag="";
@@ -210,7 +210,7 @@ function renderRouteOp(){
         gapTag=`<div class="hintline" style="margin:-2px 0 6px">价格指数${idx<myIdx?"比你低":"比你高"} ${Math.abs(gap).toFixed(0)}%（你的 ${myIdx.toFixed(2)}）</div>`;
     }
     return `<div class="req">
-        <span>${escHTML(o.airline||"AI")} · ${escHTML((o.segments||[]).join(" → "))}</span>
+        <span>${escHTML(o.airline||"AI")} · ${escHTML((o.segments||[]).join(" ＝ "))}</span>
         <b>${o.daily_flights||"—"} 班 · LF ${lf} · 指数 ${Number.isFinite(idx)?idx.toFixed(2):"—"}</b>
       </div>${fareRows}${gapTag}`;
   }).join("");
@@ -251,7 +251,7 @@ function renderRouteOp(){
     <div class="field"><label>选择航线</label><select id="rsel">${opts}</select></div>
     <div class="marketbox">
       <div class="mgrid">
-        <span>航段 <b>${r.segments.join(" → ")}</b></span>
+        <span>航段 <b>${r.segments.join(" ＝ ")}</b></span>
         <span>机型 <b>${r.ac_type}</b></span>
         <span>每日班次 <b>${r.daily_flights}</b></span>
         <span>价格指数 <b>${r.price_index.toFixed(2)}</b></span>
@@ -337,7 +337,7 @@ function renderRouteOp(){
     if(res.ok){ toast(`机型已改为 ${code}`); await refresh(); renderOp(); }
   };
   $("#rclose").onclick=async()=>{
-    if(!confirm(`确认关闭 #${r.id} ${r.segments.join("→")}？`)) return;
+    if(!confirm(`确认关闭 #${r.id} ${r.segments.join("＝")}？`)) return;
     const res=await api("/api/command",{action:"close_route",args:{route_id:r.id}});
     if(res.ok){ toast("航线已关闭"); closeOp(); await refresh(); }
   };
@@ -346,7 +346,7 @@ function renderRouteOp(){
 async function closeRouteConfirm(id){
   const r=((STATE.player&&STATE.player.routes)||[]).find(x=>x.id===id);
   if(!r) return;
-  if(!confirm(`确认关闭 #${r.id} ${r.segments.join("→")}？`)) return;
+  if(!confirm(`确认关闭 #${r.id} ${r.segments.join("＝")}？`)) return;
   const res=await api("/api/command",{action:"close_route",args:{route_id:r.id}});
   if(res.ok){ toast("航线已关闭"); await refresh(); }
 }
@@ -375,7 +375,7 @@ function renderAirportOp(){
     </div>
     <div class="sectionline"><span>经过这个机场的我的航线</span><span>${myRoutes.length} 条</span></div>
     ${myRoutes.length
-      ? myRoutes.map(r=>`<div class="req"><span>#${r.id} ${escHTML((r.segments||[]).join(" → "))}</span>
+      ? myRoutes.map(r=>`<div class="req"><span>#${r.id} ${escHTML((r.segments||[]).join(" ＝ "))}</span>
           <b>${r.daily_flights} 班 · LF ${Math.round((Number(r.lf)||0)*100)}%</b></div>`).join("")
       : '<div class="empty">还没有经过这个机场的航线。</div>'}
     <div class="btnrow" style="margin-top:10px">
@@ -404,12 +404,12 @@ function renderPublicRouteOp(){
   const idx=Number(r.price_index);
   const fareRows=prices.map(p=>{
     const eco=Number(p.eco)||0, biz=Number(p.biz)||0;
-    return `<div class="req"><span>${escHTML(p.from||"")} → ${escHTML(p.to||"")}</span>
+    return `<div class="req"><span>${escHTML(p.from||"")} ＝ ${escHTML(p.to||"")}</span>
         <b>经济 ¥${eco.toLocaleString("zh-CN")} · 商务 ¥${biz.toLocaleString("zh-CN")}</b></div>`;
   }).join("");
   $("#opbody").innerHTML=`
     <div class="marketbox">
-      <div class="sectionline"><span>${escHTML((r.segments||[]).join(" → "))}</span>
+      <div class="sectionline"><span>${escHTML((r.segments||[]).join(" ＝ "))}</span>
         <span class="${contested?"pill":""}">${contested?"竞争航线":"暂无重叠"}</span></div>
       <div class="mgrid">
         <span>航空公司 <b>${escHTML(r.airline||"AI")}</b></span>
@@ -424,7 +424,7 @@ function renderPublicRouteOp(){
     ${fareRows||'<div class="empty">这条航线暂未公开票价</div>'}
     <div class="sectionline"><span>与我的航线关系</span><span>${overlaps.length} 条重叠</span></div>
     ${overlaps.length
-      ? overlaps.map(pr=>`<div class="req"><span>#${pr.id} ${escHTML((pr.segments||[]).join(" → "))}</span>
+      ? overlaps.map(pr=>`<div class="req"><span>#${pr.id} ${escHTML((pr.segments||[]).join(" ＝ "))}</span>
           <b class="warn">共享市场</b></div>`).join("")
       : '<div class="empty">这条 AI 航线目前与你的航线没有共享城市市场。</div>'}
     <div class="hintline" style="margin-top:10px">对手航线公开网络、班次、载客率与票价；成本、收入与财务不公开。</div>`;
@@ -717,7 +717,7 @@ function renderDashboardOp(){
     lf:r.lf||0,
     margin:r.margin==null?null:r.margin,
     dist:r.distance_km||0,
-    order:(r.segments||[]).join("→")
+    order:(r.segments||[]).join("＝")
   })[key];
 
   const sorted=[...routes].sort((a,b)=>{
@@ -778,7 +778,7 @@ function renderDashboardOp(){
         </tr></thead>
         <tbody>${sorted.map(r=>`
           <tr class="rrow" onclick="openOp('route',${r.id})" title="打开航线管理">
-            <td><span class="routecell">${r.segments.join(" → ")}</span>
+            <td><span class="routecell">${r.segments.join(" ＝ ")}</span>
               <span class="sub">#${r.id} · 价格指数 ${Number(r.price_index).toFixed(2)}</span></td>
             <td>${r.ac_type}<span class="sub">${r.daily_flights} 班/日</span></td>
             <td>${Math.round(r.distance_km||0).toLocaleString()} km</td>

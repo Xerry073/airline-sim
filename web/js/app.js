@@ -231,8 +231,8 @@ function render(){
       const fare=routeFareEco(r);
       const lf=Math.round(Math.min(1,Number(r.lf)||0)*100);
       return `<tr class="rrow" onclick="openOp('route',${r.id})"
-          title="${r.segments.join("→")} · 价格指数 ${Number(r.price_index).toFixed(2)} · 客座率 ${lf}% · 点击调整价格/班次/机型">
-        <td class="seg">${r.segments.join("→")}</td>
+          title="${r.segments.join("＝")} · 价格指数 ${Number(r.price_index).toFixed(2)} · 客座率 ${lf}% · 点击调整价格/班次/机型">
+        <td class="seg">${r.segments.join("＝")}</td>
         <td>${r.daily_flights}</td>
         <td class="ac">${escHTML(r.ac_type)}</td>
         <td>${fare!=null?"¥"+fare.toLocaleString("zh-CN"):"—"}</td>

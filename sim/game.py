@@ -271,7 +271,7 @@ class Game:
                 w.routes_at[code] = w.routes_at.get(code, 0) + 1
                 w.slots_used[code] += need
             w.invalidate_demand()
-            self.log_event("开通航线", f"{'→'.join(segs)} 每日 {flights} 班 {ac}")
+            self.log_event("开通航线", f"{'＝'.join(segs)} 每日 {flights} 班 {ac}")
             return {"ok": True, "route_id": r.rid}
 
         if action == "close_route":
@@ -280,7 +280,7 @@ class Game:
             if not r:
                 return {"ok": False, "reason": "航线不存在"}
             p.close_route(r)
-            self.log_event("关闭航线", "→".join(r.segments))
+            self.log_event("关闭航线", "＝".join(r.segments))
             return {"ok": True}
 
         if action == "set_price":
@@ -356,7 +356,7 @@ class Game:
                     f"{where} 这组的 {ac} 运力不足：换机后已占 "
                     f"{pool['hours_used']:.1f}/{pool['hours_cap']:.0f} h、"
                     f"{pool['segments_used']}/{pool['segments_cap']} 段")}
-            self.log_event("更换机型", f"#{r.rid} {'→'.join(r.segments)} {old} → {ac}")
+            self.log_event("更换机型", f"#{r.rid} {'＝'.join(r.segments)} {old} → {ac}")
             return {"ok": True, "ac_type": ac, "changed": True}
 
         if action == "rebase_aircraft":
@@ -815,7 +815,7 @@ class Game:
             for rd in ad.get("routes") or []:
                 segs = [str(s) for s in rd.get("segments", [])]
                 if len(segs) < 2 or any(s not in w.airports for s in segs):
-                    raise ValueError(f"存档中的航线机场不存在：{'→'.join(segs)}")
+                    raise ValueError(f"存档中的航线机场不存在：{'＝'.join(segs)}")
                 if rd.get("ac_type", "A320") not in w._aircraft_types:
                     raise ValueError(f"存档中的航线机型不存在：{rd.get('ac_type')}")
                 r = Route(al, segs, int(rd.get("daily_flights", 1)),
