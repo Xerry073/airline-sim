@@ -86,6 +86,8 @@ if (-not $SkipTests) {
             if ($LASTEXITCODE -ne 0) { throw "goal_check failed" }
             & $node.Source tools/panel_check.js | Select-Object -Last 1
             if ($LASTEXITCODE -ne 0) { throw "panel_check failed" }
+            & $node.Source tools/route_gui_check.js | Select-Object -Last 1
+            if ($LASTEXITCODE -ne 0) { throw "route_gui_check failed" }
         } else {
             Say "  [warn] node not found, skipped JS checks" Yellow
         }

@@ -211,10 +211,11 @@ node tools/asset_check.js       #  5 条：前端资源引用、加载顺序、�
 node tools/map_check.js         # 28 条：地图几何、分级、标签避让、大圆、日界线
 node tools/goal_check.js        #  8 条：目标/模式面板与 /api/new_game 开局
 node tools/panel_check.js       #  5 条：对手榜口径（TOP 20/N、名次、空榜、转义）
+node tools/route_gui_check.js   # 10 条：开线手势（右键起点 / 左键终点 / Alt+左键经停）
 python -m compileall -q server sim calibration
 ```
 
-当前记录：`49/49`、`5/5`、`28/28`、`8/8`、`5/5`，`compileall` 退出码 0。
+当前记录：`49/49`、`5/5`、`28/28`、`8/8`、`5/5`、`10/10`，`compileall` 退出码 0。
 
 ### 前端测试怎么工作
 
@@ -226,6 +227,7 @@ python -m compileall -q server sim calibration
 | `map_check.js` | `web/js/map.js` | 正则截取 `MAP_MATH_START/END` 之间 |
 | `goal_check.js` | `web/js/goals.js` | 从 `async function startNewGame` 到文件末尾 |
 | `panel_check.js` | `web/js/app.js` | 从 `function renderRivals` 到标记注释 |
+| `route_gui_check.js` | `web/js/interaction.js` | 截取 `ROUTE_PICK_START/END` 之间，桩掉 DOM 与向导 |
 
 所以**改函数名或删标记注释会让脚本报「找不到代码段」**——这是故意的，提示你同步更新测试。
 它们验证逻辑与输出字符串，不验证像素级外观。

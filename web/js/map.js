@@ -9,6 +9,7 @@ let STATE=null, META=null, AP={}, GEO=null;
 
 let view={k:1,x:0,y:0};
 let sel=[];                 // 已选机场（最多 2 个）
+let stopover=null;          // 开线向导里的经停点（仅在 sel 有起点时有效）
 let hoverId=null;           // 当前悬停的机场/城市标记 id
 let expandedCity=null;      // 被点开的同城机场组
 let routeHover=null;        // 当前悬停的航线节点
@@ -131,7 +132,7 @@ function lodRank(k){
 }
 
 function buildMarkers(airports,opt){
-  const k=opt.k, hubs=opt.hubs||[], selected=opt.sel||[];
+  const k=opt.k, hubs=opt.hubs||[], selected=opt.sel||[], stop=opt.stopover||null;
   const expanded=opt.expandedCity||null;
   const minRank=lodRank(k);
   const byCity=new Map();
@@ -144,7 +145,7 @@ function buildMarkers(airports,opt){
   for(const [city,group] of byCity){
     group.sort((a,b)=>(b.pax||0)-(a.pax||0));
     const hub=group.some(a=>hubs.includes(a.iata));
-    const selGroup=group.some(a=>selected.includes(a.iata));
+    const selGroup=group.some(a=>selected.includes(a.iata)||a.iata===stop);
     const maxRank=Math.max(...group.map(a=>scaleRank(a.scale)));
     if(maxRank<minRank && !hub && !selGroup) continue;
 
@@ -160,7 +161,7 @@ function buildMarkers(airports,opt){
         id:"city:"+city, kind:"city", city, iata:null,
         members:group.map(a=>a.iata), x:baseX, y:baseY, trueX:baseX, trueY:baseY,
         scale:maxScale, pax:group.reduce((s,a)=>s+(a.pax||0),0),
-        hub, selected:false, selIndex:-1, leader:false
+        hub, selected:false, stop:false, selIndex:-1, leader:false
       });
       continue;
     }
@@ -181,7 +182,8 @@ function buildMarkers(airports,opt){
         id:a.iata, kind:"airport", city, iata:a.iata,
         members:[a.iata], x, y, trueX, trueY,
         scale:a.scale, pax:a.pax||0, hub:hubs.includes(a.iata),
-        selected:selected.includes(a.iata), selIndex:selected.indexOf(a.iata),
+        selected:selected.includes(a.iata), stop:a.iata===stop,
+        selIndex:selected.indexOf(a.iata),
         leader:group.length>1
       });
     });
@@ -193,6 +195,7 @@ function markerLabel(m){
   const base=m.kind==="city" ? `${m.city} ×${m.members.length}` : m.iata;
   if(m.selIndex===0) return "① "+base;
   if(m.selIndex===1) return "② "+base;
+  if(m.stop) return "经 "+base;
   return base;
 }
 
@@ -347,7 +350,7 @@ function renderMarkers(){
 
   const hubs=(STATE.player&&STATE.player.hubs)||[];
   const markers=buildMarkers(STATE.airports||[],{
-    k:view.k, view, hubs, sel, expandedCity
+    k:view.k, view, hubs, sel, stopover, expandedCity
   });
   MAPM.markers=markers;
 
@@ -362,7 +365,7 @@ function renderMarkers(){
     }
 
     const el=document.createElementNS(NS,"g");
-    el.setAttribute("class","ap"+(m.selected?" sel":"")+(hoverId===m.id?" hover":""));
+    el.setAttribute("class","ap"+(m.selected?" sel":"")+(m.stop?" stop":"")+(hoverId===m.id?" hover":""));
     el.setAttribute("data-id",m.id);
 
     const rad=(RADIUS[m.scale]||3)/view.k;
@@ -393,9 +396,9 @@ function renderMarkers(){
     dot.setAttribute("class","dot");
     dot.setAttribute("cx",m.x); dot.setAttribute("cy",m.y);
     dot.setAttribute("r",rad);
-    dot.setAttribute("fill",m.selected?"#ffc93c":(m.hub?"#ff8a3d":(m.kind==="city"?"#c8d6e4":SCALE_COLOR[m.scale]||"#6b7684")));
-    dot.setAttribute("stroke",(m.selected||m.hub)?"#fff":"#0a0f14");
-    dot.setAttribute("stroke-width",(m.selected||m.hub?1.1:0.65)/view.k);
+    dot.setAttribute("fill",m.selected?"#ffc93c":(m.stop?"#a78bfa":(m.hub?"#ff8a3d":(m.kind==="city"?"#c8d6e4":SCALE_COLOR[m.scale]||"#6b7684"))));
+    dot.setAttribute("stroke",(m.selected||m.stop||m.hub)?"#fff":"#0a0f14");
+    dot.setAttribute("stroke-width",(m.selected||m.stop||m.hub?1.1:0.65)/view.k);
     el.appendChild(dot);
 
     frag.appendChild(el);

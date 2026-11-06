@@ -37,3 +37,6 @@ jobs:
 
       - name: 对手榜校验（5 条）
         run: node tools/panel_check.js
+
+      - name: 开线手势校验（10 条）
+        run: node tools/route_gui_check.js

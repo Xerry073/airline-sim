@@ -129,7 +129,7 @@ function renderSavesOp(){
         const res=await api("/api/load",{id:s.id});
         if(res.ok){
           SEEN_SETTLE=null;
-          closeOp(); sel=[]; expandedCity=null; closeWizard();
+          closeOp(); sel=[]; stopover=null; expandedCity=null; closeWizard();
           await refresh(); toast(`已载入第 ${res.save.day} 天存档`);
         }
       };

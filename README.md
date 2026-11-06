@@ -79,7 +79,7 @@ web/              前端（零构建，纯静态）
   data/world.geo.json  内置陆地轮廓
 
 calibration/      系数表与机场数据（params.json、airports.csv、calibrate.py）
-tools/            测试脚本（asset/map/goal/panel_check.js）与打包脚本
+tools/            测试脚本（asset/map/goal/panel/route_gui_check.js）与打包脚本
 docs/             需求文档、规则边界
 saves/            存档（运行时生成，不入库）
 ```
@@ -100,6 +100,7 @@ node tools/asset_check.js
 node tools/map_check.js
 node tools/goal_check.js
 node tools/panel_check.js
+node tools/route_gui_check.js
 ```
 
 CI 在 `.github/workflows/ci.yml`，规则细节见 [CONTRIBUTING.md](CONTRIBUTING.md)。

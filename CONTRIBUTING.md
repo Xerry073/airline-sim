@@ -32,6 +32,7 @@ node tools/asset_check.js                         # 前端资源引用与语法
 node tools/map_check.js                           # 28 条地图几何
 node tools/goal_check.js                          #  8 条目标模式
 node tools/panel_check.js                         #  5 条对手榜
+node tools/route_gui_check.js                     # 10 条开线手势
 ```
 
 CI（`.github/workflows/ci.yml`）会跑同样一套。本地全绿再推，PR 才可能过。

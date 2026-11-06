@@ -87,6 +87,13 @@ function bindMap(){
     try{ svg.releasePointerCapture(e.pointerId); }catch(_){}
   });
 
+  /* 右键：选航线起点（地图上不弹浏览器菜单） */
+  svg.addEventListener("contextmenu",e=>{
+    e.preventDefault();
+    if(!STATE) return;
+    handleMapRightClick(e);
+  });
+
   svg.addEventListener("wheel",e=>{
     e.preventDefault();
     if(viewAnim){ cancelAnimationFrame(viewAnim); viewAnim=null; }
@@ -140,14 +147,27 @@ function handleMapClick(e){
   if(m){
     if(m.kind==="city"){
       expandedCity=expandedCity===m.city?null:m.city;
-      if(expandedCity) toast(`${m.city}：选择具体机场`);
+      if(expandedCity) toast(`${m.city}：右键机场设为起点，左键设为终点`);
       renderMarkers(); drawLabels();
     }else{
-      pick(m.iata);
+      pick(m.iata,e.altKey?"stop":"dest");
     }
     return;
   }
   if(sel.length||expandedCity||$("#wiz").classList.contains("on")) clearSelection();
+}
+
+function handleMapRightClick(e){
+  const p=clientToView(e);
+  const m=nearestMarker(MAPM.markers,p.x,p.y,view,15);
+  if(!m) return;
+  if(m.kind==="city"){
+    expandedCity=m.city;
+    toast(`${m.city}：选具体机场后右键设为起点`);
+    renderMarkers(); drawLabels();
+    return;
+  }
+  pick(m.iata,"origin");
 }
 
 /* ============================================================

@@ -4,6 +4,53 @@
 
 ---
 
+## 2026-11-06 · 交互轮：地图开线改为右键起点 / 左键终点 / Alt+左键经停
+
+目的：把「点两下机场」的隐式选择换成分工明确的三个手势，并让经停航线能在图上一次选齐。
+
+### 变更
+
+- **地图开线手势**（`web/js/{map,interaction,app}.js`、`web/css/app.css`）
+  - 右键点机场 = 设起点（仅在地图上拦截浏览器右键菜单）
+  - 左键点机场 = 设终点，选定即打开开线向导
+  - `Alt + 左键` = 加/取消经停点，再按一次取消；向导标题显示 `起点 → 经停 → 终点`
+  - 标记：起点 `① 北京`、终点 `② 上海`（黄），经停点 `经 成都`（紫 + 虚线光环）
+  - 左键换终点时沿用起点重开向导；右键改起点会先关掉已打开的向导
+  - 非法组合拒绝并说明原因：同城机场、起点=终点、经停点=起点、经停点与起点同城
+- **经停向导**：显示每段航距、总航程、直飞距离与绕行系数；开通失败时把后端原因回显在向导里
+  （原来只弹一条 toast，向导内不显示）
+- **新增测试** `tools/route_gui_check.js`（10 条）：从 `interaction.js` 抽取 `ROUTE_PICK_START/END`
+  之间的选择状态机，用桩验证航段顺序与四类非法选择
+- `.github/workflows/ci.yml`、`tools/package.ps1` 同步纳入第 6 套前端检查
+
+### 修复
+
+- `web/js/panels.js` 底部「开航线」面板的经停点顺序错误：原来提交 `[起点, 终点, 经停]`，
+  等于把终点当经停点、把经停点当终点；改为 `[起点, 经停, 终点]`，与 `open` 指令和
+  内核 `validate_stopover()` 的口径一致
+
+### 文档
+
+- `README-玩家.md`：地图手势表、经停航线开法、地图条目提到新手势
+- `README.md`、`README-开发者.md`、`CONTRIBUTING.md`：测试清单加入第 6 套并说明抽取方式
+
+### 测试
+
+```text
+python sim/selftest.py        -> 49 / 49
+node tools/asset_check.js     ->  5 /  5
+node tools/map_check.js       -> 28 / 28
+node tools/goal_check.js      ->  8 /  8
+node tools/panel_check.js     ->  5 /  5
+node tools/route_gui_check.js -> 10 / 10
+python -m compileall -q server sim calibration -> exit 0
+```
+
+> 未做浏览器内实点验证：`route_gui_check` 只验证选择状态机，不验证指针事件绑定与像素表现。
+> 合并前建议用 `start.cmd` 实际点一遍右键起点 → 左键终点 → Alt+左键经停。
+
+---
+
 ## 2026-11-06 · 协作轮：前后端拆分 + CI + 协作规范
 
 目的：把两个巨型单文件拆成可并行修改的模块，并让"提 PR 必须先跑什么"有机器可验的定义。
