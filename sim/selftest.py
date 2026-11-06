@@ -388,6 +388,26 @@ def main():
               and p["biz"] > p["eco"] for p in route["prices"]),
           str(route.get("prices")))
 
+    # ---------- 换机型（航线管理） ----------
+    g6 = S.Game(n_ai=0, with_player=True, seed=12)
+    g6.apply("open_route", {"segments": ["PEK", "SHA"], "daily_flights": 1,
+                            "ac_type": "A320"})
+    g6.apply("buy_aircraft", {"ac_type": "A333", "base": "PEK", "lease": True})
+    rid6 = g6.player.routes[0].rid
+    r_ok = g6.apply("set_aircraft", {"route_id": rid6, "ac_type": "A333"})
+    check("UI-05", "航线可以在机队已有型号之间换机型",
+          r_ok.get("ok") and g6.player.routes[0].ac_type == "A333"
+          and g6.snapshot()["player"]["routes"][0]["ac_type"] == "A333", str(r_ok))
+    r_same = g6.apply("set_aircraft", {"route_id": rid6, "ac_type": "A333"})
+    check("UI-05", "换成同一机型是空操作",
+          r_same.get("ok") and not r_same.get("changed"), str(r_same))
+    r_missing = g6.apply("set_aircraft", {"route_id": rid6, "ac_type": "B789"})
+    check("UI-05", "机队没有的机型被拒绝",
+          not r_missing.get("ok") and "机队没有" in str(r_missing.get("reason")),
+          str(r_missing))
+    r_unknown = g6.apply("set_aircraft", {"route_id": rid6, "ac_type": "XXXX"})
+    check("UI-05", "不存在的机型被拒绝", not r_unknown.get("ok"), str(r_unknown))
+
     # ---------- AI 公开航线网络 ----------
     g3 = S.Game(n_ai=3, with_player=True, seed=11)
     for _ in range(10):

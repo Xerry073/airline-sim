@@ -211,6 +211,15 @@ function renderRouteOp(){
         <b>${o.daily_flights||"—"} 班 · LF ${lf} · 指数 ${Number.isFinite(idx)?idx.toFixed(2):"—"}</b>
       </div>${fareRows}${gapTag}`;
   }).join("");
+
+  /* 换机型：只能选机队已有型号，当前机型始终列出 */
+  const fleetTypes=[...new Set(((STATE.player&&STATE.player.fleet)||[]).map(a=>a.type))];
+  if(!fleetTypes.includes(r.ac_type)) fleetTypes.unshift(r.ac_type);
+  const acOpts=fleetTypes.map(code=>{
+    const t=aircraftOf(code);
+    const label=t?`${t.name}（${t.seats} 座 · ${Math.round(t.range)} km）`:code;
+    return `<option value="${code}"${code===r.ac_type?" selected":""}>${label}</option>`;
+  }).join("");
   $("#opbody").innerHTML=`
     <div class="field"><label>选择航线</label><select id="rsel">${opts}</select></div>
     <div class="marketbox">
@@ -252,6 +261,14 @@ function renderRouteOp(){
       </div>
       <div class="btnrow"><button id="fsave">应用班次</button></div>
     </div>
+    <div class="opcard">
+      <h4>机型 <span>当前 ${escHTML(r.ac_type)} · 只能在机队已有型号间换</span></h4>
+      <div class="range-row">
+        <select id="acsel">${acOpts}</select>
+      </div>
+      <div class="btnrow"><button id="acsave">更换机型</button><span class="hintline" id="achint"></span></div>
+      <div class="hintline">换机型不买卖飞机：新机型必须在机队里已有，航程/跑道/日占机由后端校验。</div>
+    </div>
     <div class="btnrow"><button class="danger" id="rclose">关闭这条航线</button><span class="hintline">关闭后时刻释放，不可撤销</span></div>`;
 
   $("#rsel").onchange=()=>{ OP.routeId=Number($("#rsel").value); renderOp(); };
@@ -268,6 +285,27 @@ function renderRouteOp(){
     if(!(n>=1&&n<=14)){ toast("班次须在 1–14 之间",true); return; }
     const res=await api("/api/command",{action:"set_flights",args:{route_id:r.id,daily_flights:n}});
     if(res.ok){ toast("班次已更新"); await refresh(); renderOp(); }
+  };
+  const acHint=()=>{
+    const sel=$("#acsel"), hint=$("#achint");
+    if(!sel||!hint) return;
+    const t=aircraftOf(sel.value);
+    let worst=0;
+    for(let i=0;i<r.segments.length-1;i++){
+      const a=AP[r.segments[i]], b=AP[r.segments[i+1]];
+      if(a&&b) worst=Math.max(worst,Math.round(haversineKm(a,b)));
+    }
+    if(!t){ hint.textContent=`最长航段 ${worst} km`; return; }
+    const over=worst>t.range*0.95;
+    hint.className=over?"hintline warn":"hintline";
+    hint.textContent=`最长航段 ${worst} km · 该机型航程 ${Math.round(t.range)} km${over?"（超出）":""}`;
+  };
+  if($("#acsel")){ $("#acsel").onchange=acHint; acHint(); }
+  if($("#acsave")) $("#acsave").onclick=async()=>{
+    const code=$("#acsel").value;
+    if(code===r.ac_type){ toast("机型未变"); return; }
+    const res=await api("/api/command",{action:"set_aircraft",args:{route_id:r.id,ac_type:code}});
+    if(res.ok){ toast(`机型已改为 ${code}`); await refresh(); renderOp(); }
   };
   $("#rclose").onclick=async()=>{
     if(!confirm(`确认关闭 #${r.id} ${r.segments.join("→")}？`)) return;
@@ -532,6 +570,7 @@ function renderHelpOp(){
       ${row("close 3","关闭 3 号航线；航线号见侧栏 / 航线管理")}
       ${row("price 3 1.15","把 3 号航线价格指数调到 1.15（0.50–1.50）")}
       ${row("flights 3 2","把 3 号航线加密到每日 2 班（1–14）")}
+      ${row("ac 3 B789","把 3 号航线换成 787-9；机队里必须已有该机型")}
       ${row("hub PEK","把北京设为新枢纽；需满足 2 航线 + 3 架基地机 + 吞吐门槛")}
       ${row("buy A320 PEK","购买一架 A320，基地北京")}
       ${row("lease B789 PEK","租赁一架 787-9，基地北京；押金从现金扣除")}

@@ -176,18 +176,22 @@ const APX = {
   CTU: { city: "成都" }, KMG: { city: "昆明" },
 };
 
-function renderMine(playerRoutes, opponentRoutes) {
+function renderMine(playerRoutes, opponentRoutes, fleet) {
   const nodes = new Map();
   const nodeFor = sel => {
     if (!nodes.has(sel)) nodes.set(sel, { textContent: "", innerHTML: "" });
     return nodes.get(sel);
   };
   const fn = new Function("$", "escHTML", "STATE", "OP", "AP",
-    "routeMarketSet", "routeIsContested",
+    "routeMarketSet", "routeIsContested", "aircraftOf", "haversineKm",
     routeBlock + "\n; return renderRouteOp;");
-  const STATE = { player: { routes: playerRoutes }, opponent_routes: opponentRoutes };
+  const STATE = {
+    player: { routes: playerRoutes, fleet: fleet || [{ type: playerRoutes[0].ac_type }] },
+    opponent_routes: opponentRoutes,
+  };
   const render = fn(nodeFor, escHTML, STATE, { routeId: playerRoutes[0].id }, APX,
-    routeMarketSet, routeIsContested);
+    routeMarketSet, routeIsContested,
+    code => ({ name: code + " 型", seats: 165, range: 6300 }), () => 1000);
   render();
   return nodeFor("#opbody").innerHTML;
 }
@@ -240,6 +244,16 @@ const mine = {
   const html = renderMine([mine], []);
   check(/没有 AI 在飞同一个市场/.test(html) && /暂无重叠/.test(html),
     "无竞争时给出占位文案与「暂无重叠」");
+}
+
+// 12) 换机型：下拉只列机队已有型号，当前机型必在列表中
+{
+  const html = renderMine([mine], [], [{ type: "A320" }, { type: "B789" }]);
+  check(/id="acsel"/.test(html) && /id="acsave"/.test(html)
+    && /value="A320"/.test(html) && /value="B789"/.test(html)
+    && !/value="A333"/.test(html) && /更换机型/.test(html),
+    "换机型下拉只列机队已有型号，且带更换按钮",
+    html.replace(/\s+/g, " ").match(/<select id="acsel">[\s\S]*?<\/select>/)?.[0] || "");
 }
 
 console.log("\n" + (failed ? "FAILED" : "OK") + "  " + passed + " passed, " + failed + " failed");

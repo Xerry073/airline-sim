@@ -258,6 +258,7 @@ async function cmd(text){
     close:()=>({action:"close_route",args:{route_id:Number(a[0])}}),
     price:()=>({action:"set_price",args:{route_id:Number(a[0]),price_index:Number(a[1])}}),
     flights:()=>({action:"set_flights",args:{route_id:Number(a[0]),daily_flights:Number(a[1])}}),
+    ac:()=>({action:"set_aircraft",args:{route_id:Number(a[0]),ac_type:(a[1]||"").toUpperCase()}}),
     hub:()=>({action:"add_hub",args:{airport:a[0]}}),
     buy:()=>({action:"buy_aircraft",args:{ac_type:a[0]||"A320",base:a[1]}}),
     lease:()=>({action:"buy_aircraft",args:{ac_type:a[0]||"A320",base:a[1],lease:true}}),

@@ -262,6 +262,45 @@ class Game:
                 return {"ok": False, "reason": "机队运力不足"}
             return {"ok": True, "daily_flights": n}
 
+        if action == "set_aircraft":
+            rid = args.get("route_id")
+            ac = str(args.get("ac_type", "")).upper()
+            r = next((x for x in p.routes if x.rid == rid), None)
+            if not r:
+                return {"ok": False, "reason": "航线不存在"}
+            if ac not in w._aircraft_types:
+                return {"ok": False, "reason": "机型不存在"}
+            if ac == r.ac_type:
+                return {"ok": True, "ac_type": ac, "changed": False}
+            # 只能换成机队里已有的机型（自己运营过的才谈得上「调机」）
+            if not any(a.type == ac for a in p.fleet):
+                return {"ok": False, "reason": f"机队没有 {ac}，请先购买或租赁"}
+            t = w.ac(ac)
+            if len(r.segments) == 3:
+                ok, why = validate_stopover(w, list(r.segments), ac, r.daily_flights)
+                if not ok:
+                    return {"ok": False, "reason": why}
+            else:
+                runway_ok = {"支线": ("R",), "窄体": ("R", "S", "W"), "宽体": ("W",)}
+                for i in range(r.n_segments):
+                    a, b = r.segments[i], r.segments[i + 1]
+                    d = w.airport_dist(a, b)
+                    if d < STOP["min_segment_km"]:
+                        return {"ok": False, "reason": f"航段距离 {d:.0f} km 过短"}
+                    if d > t["range"] * 0.95:
+                        return {"ok": False, "reason": f"{ac} 航程不足（{d:.0f} km）"}
+                    for code in (a, b):
+                        if w.airports[code]["runway"] not in runway_ok[t["class"]]:
+                            return {"ok": False, "reason": f"{code} 跑道等级不满足 {ac}"}
+            old = r.ac_type
+            r.ac_type = ac
+            # 换更慢/过站更久的机型可能吃穿机队运力
+            if p.total_hours() > p.capacity_hours() + 1e-9:
+                r.ac_type = old
+                return {"ok": False, "reason": "机队运力不足：该机型更慢，日占机超过上限"}
+            self.log_event("更换机型", f"#{r.rid} {'→'.join(r.segments)} {old} → {ac}")
+            return {"ok": True, "ac_type": ac, "changed": True}
+
         if action == "add_hub":
             code = str(args.get("airport", "")).upper()
             ok, fee = p.can_add_hub(code)

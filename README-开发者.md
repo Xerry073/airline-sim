@@ -54,7 +54,7 @@
 | `sim/goals.py` | 四目标判定、区域份额、月报质量、A–E 评级 |
 | `sim/game.py` | `Game`：逐日推进、玩家指令、快照、存档序列化 |
 | `sim/report.py` | `run` / `summarize` / `write_report` / CLI |
-| `sim/selftest.py` | 52 条验收自测 |
+| `sim/selftest.py` | 56 条验收自测 |
 | `web/index.html` | 页面结构 + 脚本加载顺序 |
 | `web/css/app.css` | 全部样式 |
 | `web/js/*.js` | 按加载顺序：map → routes → interaction → panels → saves → goals → app |
@@ -170,6 +170,7 @@ python server/app.py --port 8777 --ai 50
 | `close_route` | `route_id` | 存在性；关线立即释放时刻 |
 | `set_price` | `route_id`、`price_index` | 0.50–1.50 |
 | `set_flights` | `route_id`、`daily_flights` | 1–14 且机队运力足够 |
+| `set_aircraft` | `route_id`、`ac_type` | 机型须在机队中；航程/跑道/经停九项/日占机 |
 | `add_hub` | `airport` | 三档门槛 + 开设费 |
 | `buy_aircraft` | `ac_type`、`base`、`lease` | 现金或租赁额度 |
 | `sell_aircraft` | `aircraft_id` | 存在性 |
@@ -209,16 +210,16 @@ log[]           最近 40 条事件
 ## 6. 测试
 
 ```bash
-python sim/selftest.py          # 52 条内核验收（FR 编号对齐需求文档）
+python sim/selftest.py          # 56 条内核验收（FR 编号对齐需求文档）
 node tools/asset_check.js       #  5 条：前端资源引用、加载顺序、语法、重名、顶层语句
 node tools/map_check.js         # 31 条：地图几何、分级、标签避让、大圆、日界线、开线焦点
 node tools/goal_check.js        #  8 条：目标/模式面板与 /api/new_game 开局
-node tools/panel_check.js       # 13 条：对手榜口径、AI 票价、我的航线竞争对照
+node tools/panel_check.js       # 14 条：对手榜口径、AI 票价、竞争对照、换机型
 node tools/route_gui_check.js   # 10 条：开线手势（右键起点 / 左键终点 / Alt+左键经停）
 python -m compileall -q server sim calibration
 ```
 
-当前记录：`52/52`、`5/5`、`31/31`、`8/8`、`13/13`、`10/10`，`compileall` 退出码 0。
+当前记录：`56/56`、`5/5`、`31/31`、`8/8`、`14/14`、`10/10`，`compileall` 退出码 0。
 
 ### 前端测试怎么工作
 
